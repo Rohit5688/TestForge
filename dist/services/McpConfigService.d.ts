@@ -61,13 +61,32 @@ export interface McpConfig {
     /** Number of retries for test execution */
     retries: number;
     /**
+     * @deprecated Use credentials.strategy instead. Kept for backward compatibility.
      * Auth strategy for the project:
      *  - "none"       → no login step generated
      *  - "users-json" → credentials from test-data/users.{env}.json (recommended)
      *  - "env"        → credentials from .env variables (legacy)
      * @default 'users-json'
      */
-    authStrategy: 'none' | 'users-json' | 'env';
+    authStrategy?: 'none' | 'users-json' | 'env';
+    /**
+     * Credential storage strategy for this project (AppForge-aligned structure).
+     * Controls how test credentials are stored and accessed.
+     * If both authStrategy and credentials are set, credentials takes precedence.
+     */
+    credentials?: {
+        /**
+         * Storage strategy:
+         *  - "none"       → no login step generated
+         *  - "users-json" → credentials from test-data/users.{env}.json (recommended)
+         *  - "env"        → credentials from .env variables (legacy)
+         */
+        strategy: 'none' | 'users-json' | 'env';
+        /** Optional: Path to the credential file (relative to projectRoot) */
+        file?: string;
+        /** Optional: For custom strategies, describe the JSON structure for LLM prompts */
+        schemaHint?: string;
+    };
     /** Currently active environment (matches users.{env}.json).
      * @default 'staging'
      */
@@ -175,5 +194,15 @@ export declare class McpConfigService {
      */
     scaffold(projectRoot: string, overrides?: Partial<McpConfig>): McpConfig;
     private deepMerge;
+    /**
+     * Returns the auth strategy, handling both new (credentials.strategy) and
+     * legacy (authStrategy) formats. Credentials takes precedence if both exist.
+     */
+    getAuthStrategy(config: McpConfig): 'none' | 'users-json' | 'env';
+    /**
+     * Returns the custom wrapper package name from basePageClass.
+     * Used by CodebaseAnalyzerService and UtilAuditService for wrapper introspection.
+     */
+    getCustomWrapper(config: McpConfig): string | undefined;
 }
 //# sourceMappingURL=McpConfigService.d.ts.map

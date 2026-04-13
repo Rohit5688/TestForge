@@ -18,7 +18,7 @@ export const DEFAULT_CONFIG = {
     },
     retries: 1,
     backgroundBlockThreshold: 3,
-    authStrategy: 'users-json',
+    credentials: { strategy: 'users-json' },
     currentEnvironment: 'staging',
     environments: ['local', 'staging', 'prod'],
     waitStrategy: 'domcontentloaded',
@@ -161,6 +161,23 @@ export class McpConfigService {
             }
         }
         return result;
+    }
+    // ---------------------------------------------------------------------------
+    // Helper methods for backward-compatible access
+    // ---------------------------------------------------------------------------
+    /**
+     * Returns the auth strategy, handling both new (credentials.strategy) and
+     * legacy (authStrategy) formats. Credentials takes precedence if both exist.
+     */
+    getAuthStrategy(config) {
+        return config.credentials?.strategy || config.authStrategy || 'users-json';
+    }
+    /**
+     * Returns the custom wrapper package name from basePageClass.
+     * Used by CodebaseAnalyzerService and UtilAuditService for wrapper introspection.
+     */
+    getCustomWrapper(config) {
+        return config.basePageClass;
     }
 }
 //# sourceMappingURL=McpConfigService.js.map

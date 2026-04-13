@@ -1,11 +1,14 @@
 import * as fs from 'fs/promises';
+import * as fsSync from 'fs';
 import * as path from 'path';
+import { createRequire } from 'module';
 import { Project, SyntaxKind, Node } from 'ts-morph';
 import { McpConfigService, DEFAULT_CONFIG } from './McpConfigService.js';
 import { McpErrors } from '../types/ErrorSystem.js';
 import { DependencyService } from './DependencyService.js';
 import { ExtensionLoader } from '../utils/ExtensionLoader.js';
 export class CodebaseAnalyzerService {
+    wrapperCache = new Map();
     async analyze(projectRoot, customWrapperPackage) {
         const result = {
             bddSetup: { present: false },
@@ -31,6 +34,11 @@ export class CodebaseAnalyzerService {
         result.detectedPaths.featuresRoot = config.dirs.features;
         result.detectedPaths.stepsRoot = config.dirs.stepDefinitions;
         result.detectedPaths.pagesRoot = config.dirs.pages;
+        // Introspect custom wrapper if specified (version-based caching)
+        const wrapper = customWrapperPackage || mcpConfig.getCustomWrapper(config);
+        if (wrapper) {
+            result.customWrapper = await this.introspectWrapper(projectRoot, wrapper);
+        }
         result.mcpConfig = {
             version: config.version || '0.0.0',
             upgradeNeeded: (config.version || '0.0.0') < DEFAULT_CONFIG.version,
@@ -41,13 +49,14 @@ export class CodebaseAnalyzerService {
         const finalDeps = depService.detectImplicitFrameworks(projectRoot, deps);
         result.dependencies = finalDeps;
         try {
-            // 1. Check for Playwright Config
-            const configPath = path.join(projectRoot, 'playwright.config.ts');
-            const hasConfig = await this.fileExists(configPath);
-            if (hasConfig) {
-                const configContent = await fs.readFile(configPath, 'utf8');
-                result.bddSetup.present = configContent.includes('playwright-bdd');
-                result.bddSetup.configFile = 'playwright.config.ts';
+            // 1. Check for Playwright Config (search recursively since it may be in subdirs like src/test/)
+            const allTsFiles = await this.readAllFiles(projectRoot, '.ts');
+            const configFile = allTsFiles.find(f => f.endsWith('playwright.config.ts'));
+            if (configFile) {
+                const configContent = await fs.readFile(configFile, 'utf8');
+                const hasBdd = configContent.includes('playwright-bdd') || configContent.includes('defineBddConfig');
+                result.bddSetup.present = hasBdd;
+                result.bddSetup.configFile = path.relative(projectRoot, configFile).replace(/\\/g, '/');
             }
             // 2. Discover Features dynamically across the workspace
             const featureFiles = await this.readAllFiles(projectRoot, '.feature');
@@ -206,8 +215,22 @@ export class CodebaseAnalyzerService {
             };
             // 5. Explicit Custom Wrapper handling
             if (customWrapperPackage) {
-                const extractedMethods = await this.resolveAndExtractWrapperMethods(projectRoot, customWrapperPackage);
-                const isInstalled = extractedMethods.length > 0;
+                // IMPORTANT: introspectWrapper (early section) already did a full recursive scan
+                // via scanWrapperDir. resolveAndExtractWrapperMethods reads only the package entry
+                // point — which is often a barrel file of re-exports and yields zero methods,
+                // producing a false isInstalled:false. Reuse the early-path result instead.
+                let extractedMethods;
+                let isInstalled;
+                if (result.customWrapper && result.customWrapper.package === customWrapperPackage) {
+                    // Reuse the already-scanned recursive result
+                    extractedMethods = result.customWrapper.detectedMethods;
+                    isInstalled = result.customWrapper.isInstalled ?? extractedMethods.length > 0;
+                }
+                else {
+                    // Fallback: full recursive scan (handles edge case where early path didn't run)
+                    extractedMethods = await this.scanWrapper(projectRoot, customWrapperPackage);
+                    isInstalled = extractedMethods.length > 0;
+                }
                 result.customWrapper = {
                     package: customWrapperPackage,
                     detectedMethods: isInstalled ? extractedMethods : [],
@@ -510,12 +533,26 @@ RULES FOR AI:
     /**
      * Enhanced AST-based method extraction for TypeScript classes using ts-morph.
      * Leveraged primarily to resolve custom wrapper packages.
+     *
+     * For .d.ts files, also uses regex fallback to extract `export declare function` patterns
+     * since ts-morph may not capture all declaration file patterns.
      */
     extractPublicMethods(content) {
+        const methods = [];
+        // Regex fallback for .d.ts files: extract `export declare function functionName(`
+        const declareMatches = content.matchAll(/export\s+declare\s+function\s+(\w+)\s*\(/g);
+        for (const match of declareMatches) {
+            if (match[1])
+                methods.push(match[1] + '()');
+        }
+        // If we found methods via regex (common for .d.ts), return them
+        if (methods.length > 0) {
+            return [...new Set(methods)];
+        }
+        // Otherwise, use ts-morph for source files
         try {
             const project = new Project({ compilerOptions: { strict: false }, skipAddingFilesFromTsConfig: true });
             const sourceFile = project.createSourceFile('temp.ts', content);
-            const methods = [];
             for (const cls of sourceFile.getClasses()) {
                 const publicMethods = cls.getMethods()
                     .filter(m => !m.hasModifier(SyntaxKind.PrivateKeyword) && !m.hasModifier(SyntaxKind.ProtectedKeyword))
@@ -546,7 +583,7 @@ RULES FOR AI:
             return [...new Set(methods)];
         }
         catch (e) {
-            return [];
+            return [...new Set(methods)]; // Return regex matches if ts-morph fails
         }
     }
     /**
@@ -576,8 +613,9 @@ RULES FOR AI:
             if (await this.fileExists(localPath + '.ts')) {
                 return this.extractPublicMethods(await fs.readFile(localPath + '.ts', 'utf8'));
             }
-            // 2. Check if it's in node_modules
-            const nodeModulesPath = path.join(projectRoot, 'node_modules', wrapperPath);
+            // 2. Resolve via full Node module resolution (handles hoisting / workspaces / pnpm)
+            const resolvedRoot = this.resolvePackageRoot(projectRoot, wrapperPath);
+            const nodeModulesPath = resolvedRoot ?? path.join(projectRoot, 'node_modules', wrapperPath);
             if (await this.directoryExists(nodeModulesPath)) {
                 const pkgPath = path.join(nodeModulesPath, 'package.json');
                 if (await this.fileExists(pkgPath)) {
@@ -641,6 +679,207 @@ RULES FOR AI:
         }
         catch {
             return 'structure could not be parsed';
+        }
+    }
+    /**
+     * Introspects a custom wrapper package with version-based caching.
+     * Cache key = pkg@version, invalidates automatically when package updates.
+     * Uses file-based persistence (.TestForge/wrapper-cache.json) to survive server restarts.
+     */
+    async introspectWrapper(projectRoot, pkg) {
+        // Get wrapper version for cache key
+        const version = await this.getWrapperVersion(projectRoot, pkg);
+        const cacheKey = `${pkg}@${version}`;
+        // Check in-memory cache first
+        if (this.wrapperCache.has(cacheKey)) {
+            console.error(`[Wrapper] Memory cache hit: ${cacheKey}`);
+            return this.wrapperCache.get(cacheKey);
+        }
+        // Check file-based cache
+        const cacheFilePath = path.join(projectRoot, '.TestForge', 'wrapper-cache.json');
+        const cachedFromFile = await this.loadWrapperCacheFromFile(cacheFilePath, cacheKey);
+        if (cachedFromFile) {
+            console.error(`[Wrapper] File cache hit: ${cacheKey}`);
+            this.wrapperCache.set(cacheKey, cachedFromFile);
+            return cachedFromFile;
+        }
+        console.error(`[Wrapper] Cache miss - scanning ${cacheKey}...`);
+        // Scan wrapper
+        const detectedMethods = await this.scanWrapper(projectRoot, pkg);
+        const isInstalled = detectedMethods.length > 0;
+        const result = {
+            package: pkg,
+            detectedMethods,
+            isInstalled
+        };
+        // Cache result in memory
+        this.wrapperCache.set(cacheKey, result);
+        console.error(`[Wrapper] Cached ${detectedMethods.length} methods from ${cacheKey}`);
+        // Persist to file
+        await this.saveWrapperCacheToFile(cacheFilePath, cacheKey, result);
+        return result;
+    }
+    /**
+     * Load wrapper cache from .TestForge/wrapper-cache.json
+     */
+    async loadWrapperCacheFromFile(cacheFilePath, cacheKey) {
+        try {
+            if (!await this.fileExists(cacheFilePath))
+                return null;
+            const content = await fs.readFile(cacheFilePath, 'utf8');
+            const cache = JSON.parse(content);
+            return cache[cacheKey] || null;
+        }
+        catch {
+            return null;
+        }
+    }
+    /**
+     * Save wrapper cache to .TestForge/wrapper-cache.json
+     */
+    async saveWrapperCacheToFile(cacheFilePath, cacheKey, result) {
+        try {
+            const cacheDir = path.dirname(cacheFilePath);
+            if (!await this.directoryExists(cacheDir)) {
+                await fs.mkdir(cacheDir, { recursive: true });
+            }
+            let cache = {};
+            if (await this.fileExists(cacheFilePath)) {
+                const content = await fs.readFile(cacheFilePath, 'utf8');
+                cache = JSON.parse(content);
+            }
+            cache[cacheKey] = result;
+            await fs.writeFile(cacheFilePath, JSON.stringify(cache, null, 2), 'utf8');
+        }
+        catch (e) {
+            console.error(`[Wrapper] Failed to save cache: ${e}`);
+        }
+    }
+    /**
+     * Resolves the on-disk root directory of a package using Node.js module
+     * resolution (handles hoisted packages, workspaces, symlinks) with a manual
+     * directory-tree walk as fallback.
+     *
+     * Returns null if the package cannot be found anywhere in the resolution chain.
+     */
+    resolvePackageRoot(projectRoot, packageName) {
+        // Strategy 1: Node.js require resolution — the most reliable approach.
+        // It respects symlinks, pnpm virtual stores, yarn PnP, npm workspaces, etc.
+        try {
+            const requireFromProject = createRequire(path.join(projectRoot, '__placeholder__.js'));
+            const pkgJsonPath = requireFromProject.resolve(`${packageName}/package.json`);
+            return path.dirname(pkgJsonPath);
+        }
+        catch { /* package not resolvable via require from projectRoot */ }
+        // Strategy 2: Walk UP the directory tree — handles monorepo hoisting where
+        // the package lives two or more levels above projectRoot in node_modules.
+        let dir = projectRoot;
+        while (true) {
+            const candidate = path.join(dir, 'node_modules', packageName);
+            if (fsSync.existsSync(candidate))
+                return candidate;
+            const parent = path.dirname(dir);
+            if (parent === dir)
+                break; // reached filesystem root
+            dir = parent;
+        }
+        return null;
+    }
+    /**
+     * Gets the version of a wrapper package for cache invalidation.
+     * Returns package.json version for npm packages, file mtime for local files.
+     */
+    async getWrapperVersion(projectRoot, pkg) {
+        try {
+            // Try via full resolution (handles hoisting / workspaces)
+            const resolvedRoot = this.resolvePackageRoot(projectRoot, pkg);
+            const pkgJsonPath = resolvedRoot
+                ? path.join(resolvedRoot, 'package.json')
+                : path.join(projectRoot, 'node_modules', pkg, 'package.json');
+            if (await this.fileExists(pkgJsonPath)) {
+                const pkgJson = JSON.parse(await fs.readFile(pkgJsonPath, 'utf8'));
+                return pkgJson.version || 'unknown';
+            }
+            // Try as relative path (local file)
+            const wrapperPath = path.join(projectRoot, pkg);
+            if (await this.fileExists(wrapperPath)) {
+                const stats = await fs.stat(wrapperPath);
+                return stats.mtime.getTime().toString(); // mtime as version
+            }
+            // Check with .ts extension
+            if (await this.fileExists(wrapperPath + '.ts')) {
+                const stats = await fs.stat(wrapperPath + '.ts');
+                return stats.mtime.getTime().toString();
+            }
+            return 'unknown';
+        }
+        catch {
+            return 'unknown';
+        }
+    }
+    /**
+     * Scans a wrapper package (npm or local) and extracts method names.
+     */
+    async scanWrapper(projectRoot, pkg) {
+        // Resolve using full Node module resolution (handles hoisting / workspaces)
+        const resolved = this.resolvePackageRoot(projectRoot, pkg);
+        let wrapperRoot = resolved ?? path.join(projectRoot, 'node_modules', pkg);
+        // Fallback: try as relative path from projectRoot
+        if (!resolved && !await this.directoryExists(wrapperRoot)) {
+            wrapperRoot = path.join(projectRoot, pkg);
+        }
+        if (!await this.directoryExists(wrapperRoot) && !await this.fileExists(wrapperRoot)) {
+            console.error(`[WrapperScan] Package "${pkg}" not found. Tried: ${resolved ?? 'N/A'}, ${path.join(projectRoot, 'node_modules', pkg)}, ${path.join(projectRoot, pkg)}`);
+            return [];
+        }
+        const methods = new Set();
+        // If it's a file, scan it directly
+        if (await this.fileExists(wrapperRoot)) {
+            const content = await fs.readFile(wrapperRoot, 'utf8');
+            return this.extractPublicMethods(content);
+        }
+        // If it's a directory, scan recursively
+        await this.scanWrapperDir(wrapperRoot, methods);
+        return Array.from(methods);
+    }
+    /**
+     * Recursively scans a wrapper directory for method names.
+     * Depth-limited to avoid performance issues.
+     */
+    async scanWrapperDir(dir, methodNames, depth = 0) {
+        if (depth > 5)
+            return; // Max 5 levels deep (needed for dist/utils/*.d.ts)
+        try {
+            const entries = await fs.readdir(dir, { withFileTypes: true });
+            for (const entry of entries) {
+                // Skip common non-source directories
+                if (['test', 'tests', '__tests__', 'docs', 'examples', 'node_modules'].includes(entry.name)) {
+                    continue;
+                }
+                const fullPath = path.join(dir, entry.name);
+                if (entry.isDirectory()) {
+                    console.error(`[WrapperScan] Dir depth=${depth}: ${fullPath}`);
+                    await this.scanWrapperDir(fullPath, methodNames, depth + 1);
+                }
+                else if (entry.name.match(/\.(d\.ts|ts|js)$/)) {
+                    // For compiled packages, .d.ts files are the primary source of type info
+                    // For source packages, .ts files are scanned
+                    // Skip .d.ts ONLY if a corresponding .ts exists
+                    const isDts = entry.name.endsWith('.d.ts');
+                    const correspondingTs = fullPath.replace(/\.d\.ts$/, '.ts');
+                    if (isDts && await this.fileExists(correspondingTs)) {
+                        continue; // Skip .d.ts if .ts source exists
+                    }
+                    console.error(`[WrapperScan] File depth=${depth}: ${fullPath}`);
+                    const content = await fs.readFile(fullPath, 'utf8');
+                    const methods = this.extractPublicMethods(content);
+                    console.error(`[WrapperScan] Extracted ${methods.length} methods from ${entry.name}`);
+                    methods.forEach(m => methodNames.add(m));
+                }
+            }
+        }
+        catch (e) {
+            console.error(`[WrapperScan] Error at depth=${depth}: ${e}`);
         }
     }
 }

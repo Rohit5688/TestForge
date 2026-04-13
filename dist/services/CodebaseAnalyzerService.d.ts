@@ -1,5 +1,6 @@
 import type { ICodebaseAnalyzer, CodebaseAnalysisResult } from '../interfaces/ICodebaseAnalyzer.js';
 export declare class CodebaseAnalyzerService implements ICodebaseAnalyzer {
+    private wrapperCache;
     analyze(projectRoot: string, customWrapperPackage?: string): Promise<CodebaseAnalysisResult>;
     private fileExists;
     /**
@@ -24,6 +25,9 @@ export declare class CodebaseAnalyzerService implements ICodebaseAnalyzer {
     /**
      * Enhanced AST-based method extraction for TypeScript classes using ts-morph.
      * Leveraged primarily to resolve custom wrapper packages.
+     *
+     * For .d.ts files, also uses regex fallback to extract `export declare function` patterns
+     * since ts-morph may not capture all declaration file patterns.
      */
     private extractPublicMethods;
     /**
@@ -40,5 +44,41 @@ export declare class CodebaseAnalyzerService implements ICodebaseAnalyzer {
      * Returns a string summarizing the shape (e.g. "{ id, name, details: { ... } }")
      */
     private extractSampleStructure;
+    /**
+     * Introspects a custom wrapper package with version-based caching.
+     * Cache key = pkg@version, invalidates automatically when package updates.
+     * Uses file-based persistence (.TestForge/wrapper-cache.json) to survive server restarts.
+     */
+    private introspectWrapper;
+    /**
+     * Load wrapper cache from .TestForge/wrapper-cache.json
+     */
+    private loadWrapperCacheFromFile;
+    /**
+     * Save wrapper cache to .TestForge/wrapper-cache.json
+     */
+    private saveWrapperCacheToFile;
+    /**
+     * Resolves the on-disk root directory of a package using Node.js module
+     * resolution (handles hoisted packages, workspaces, symlinks) with a manual
+     * directory-tree walk as fallback.
+     *
+     * Returns null if the package cannot be found anywhere in the resolution chain.
+     */
+    private resolvePackageRoot;
+    /**
+     * Gets the version of a wrapper package for cache invalidation.
+     * Returns package.json version for npm packages, file mtime for local files.
+     */
+    private getWrapperVersion;
+    /**
+     * Scans a wrapper package (npm or local) and extracts method names.
+     */
+    private scanWrapper;
+    /**
+     * Recursively scans a wrapper directory for method names.
+     * Depth-limited to avoid performance issues.
+     */
+    private scanWrapperDir;
 }
 //# sourceMappingURL=CodebaseAnalyzerService.d.ts.map

@@ -317,13 +317,14 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
             // Ignore write fails if config is in a read-only state or doesn't exist
         }
         // Supplementary metadata for the LLM prompt
+        const mcpConfigService = new McpConfigService();
         analysis.mcpConfig = {
             version: config.version || '0.0.0',
             upgradeNeeded: (config.version || '0.0.0') < DEFAULT_CONFIG.version,
             allowedTags: config.tags,
             backgroundBlockThreshold: config.backgroundBlockThreshold,
             waitStrategy: config.waitStrategy,
-            authStrategy: config.authStrategy
+            authStrategy: mcpConfigService.getAuthStrategy(config)
         };
         const userStoreResult = userStore.read(projectRoot, config.currentEnvironment);
         if (userStoreResult.exists && userStoreResult.roles.length > 0) {
