@@ -153,6 +153,17 @@
         "production-bug"
       ],
       "timestamp": "2026-04-12T23:26:09.029Z"
+    },
+    {
+      "id": "rule-1776107235117",
+      "pattern": "Merging remote fixes into a local feature branch with uncommitted changes and build artifact conflicts.",
+      "solution": "1. Stash local changes. 2. Fetch and merge the remote branch. 3. Pop stash and resolve conflicts (typically in dist/ or generated files) by choosing the merged version or rebuilding. 4. Run mandatory graph synchronization (build_appforge_graph.py). 5. Commit and push the combined result.",
+      "tags": [
+        "git-workflow",
+        "merge-conflicts",
+        "graph-sync"
+      ],
+      "timestamp": "2026-04-13T19:07:15.118Z"
     }
   ]
 }
