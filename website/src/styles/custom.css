@@ -1,0 +1,66 @@
+/* Custom TestForge Styles */
+
+:root {
+	/* Teal/Cyan Accent - TestForge Web Identity (Dark Mode Defaults) */
+	--sl-color-accent-low: #083344;
+	--sl-color-accent: #06b6d4;
+	--sl-color-accent-high: #67e8f9;
+}
+
+/* Light Mode Specific Overrides */
+:root[data-theme='light'] {
+	--sl-color-accent-low: #cffafe;
+	--sl-color-accent: #0891b2; /* Darker teal for better contrast on white */
+	--sl-color-accent-high: #155e75;
+}
+
+/* 1. Header Sidebar Logo - Optimized for Visibility */
+.site-title {
+    align-items: center !important;
+}
+
+.site-title img {
+    height: 3.2rem !important; /* Increased for better legibility */
+    width: auto;
+    margin-right: 0.6rem;
+    vertical-align: middle;
+    /* Ensure icon pops on both light/dark backgrounds */
+    filter: drop-shadow(0 0 2px rgba(6, 182, 212, 0.2));
+}
+
+/* Tighten the header container to reduce whitespace bloat */
+.header {
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+}
+
+/* 2. Hero Section Logo (Homepage) - High Impact */
+.hero img {
+    height: 30rem !important; /* Restored large hero presence */
+    max-height: 60vh;
+    width: auto !important;
+    max-width: 100%;
+    object-fit: contain;
+    /* Teal drop-shadow matching the TestForge theme */
+    filter: drop-shadow(0 0 40px rgba(6, 182, 212, 0.45));
+}
+
+/* Reduce whitespace around the large Hero section */
+.hero {
+    padding-top: 3rem !important;
+    padding-bottom: 3rem !important;
+}
+
+.hero > .sl-flex {
+    gap: 2rem !important;
+}
+
+/* Ensure mobile header stays balanced */
+@media (max-width: 50rem) {
+    .site-title img {
+        height: 2.25rem !important;
+    }
+    .hero img {
+        height: 16rem !important;
+    }
+}
