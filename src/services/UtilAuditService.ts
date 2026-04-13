@@ -16,7 +16,7 @@ import { McpConfigService } from './McpConfigService.js';
  */
 const PLAYWRIGHT_API_SURFACE = [
   // ─── Navigation ─────────────────────────────────────
-  { method: 'navigate',       aliases: ['goto', 'navigateTo', 'open'],            category: 'Navigation',  suggestedUtilClass: 'NavigationHelper', description: 'Navigate to a URL with optional wait' },
+  { method: 'navigate',       aliases: ['goto', 'navigateTo', 'open', 'gotourl', 'clickandnavigate'],            category: 'Navigation',  suggestedUtilClass: 'NavigationHelper', description: 'Navigate to a URL with optional wait' },
   { method: 'goBack',         aliases: ['back', 'navigateBack'],                   category: 'Navigation',  suggestedUtilClass: 'NavigationHelper', description: 'Click browser back button' },
   { method: 'reload',         aliases: ['refresh', 'refreshPage'],                 category: 'Navigation',  suggestedUtilClass: 'NavigationHelper', description: 'Reload the current page' },
   { method: 'waitForUrl',     aliases: ['waitForNavigation', 'waitForRoute'],      category: 'Navigation',  suggestedUtilClass: 'NavigationHelper', description: 'Wait until URL matches pattern' },
@@ -25,37 +25,37 @@ const PLAYWRIGHT_API_SURFACE = [
   { method: 'click',          aliases: ['tap', 'press'],                           category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Click an element with retry' },
   { method: 'fill',           aliases: ['type', 'input', 'setValue', 'enterText'], category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Fill an input field' },
   { method: 'clear',          aliases: ['clearInput', 'clearField'],               category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Clear an input field' },
-  { method: 'selectOption',   aliases: ['select', 'choose', 'dropdown'],          category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Select from a dropdown' },
+  { method: 'selectOption',   aliases: ['select', 'choose', 'dropdown', 'selectbyvalue', 'selectbyvalues', 'selectbytext', 'selectbyindex'],          category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Select from a dropdown' },
   { method: 'check',          aliases: ['checkBox', 'tick'],                       category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Check a checkbox or radio' },
   { method: 'uncheck',        aliases: ['uncheckBox', 'untick'],                   category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Uncheck a checkbox' },
-  { method: 'upload',         aliases: ['uploadFile', 'setInputFiles'],            category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Upload a file via input[type=file]' },
+  { method: 'upload',         aliases: ['uploadFile', 'setInputFiles', 'uploadfiles'],            category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Upload a file via input[type=file]' },
   { method: 'hover',          aliases: ['mouseOver', 'hoverOver'],                 category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Hover over an element' },
   { method: 'dragAndDrop',    aliases: ['drag', 'drop'],                           category: 'Interaction', suggestedUtilClass: 'ActionHelper', description: 'Drag element to a target' },
 
   // ─── Assertions ───────────────────────────────────────
-  { method: 'expectVisible',  aliases: ['assertVisible', 'isVisible', 'toBeVisible'], category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element is visible' },
-  { method: 'expectText',     aliases: ['assertText', 'toHaveText', 'containsText'],  category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element text content' },
-  { method: 'expectUrl',      aliases: ['assertUrl', 'toHaveURL', 'urlContains'],     category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert current page URL' },
-  { method: 'expectTitle',    aliases: ['assertTitle', 'toHaveTitle'],               category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert page title' },
-  { method: 'expectCount',    aliases: ['assertCount', 'toHaveCount'],               category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element count' },
-  { method: 'expectEnabled',  aliases: ['assertEnabled', 'toBeEnabled'],             category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element is enabled' },
-  { method: 'expectHidden',   aliases: ['assertHidden', 'toBeHidden', 'notVisible'], category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element is hidden' },
+  { method: 'expectVisible',  aliases: ['assertVisible', 'isVisible', 'toBeVisible', 'expectelementtobevisible', 'waitforelementtobevisible'], category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element is visible' },
+  { method: 'expectText',     aliases: ['assertText', 'toHaveText', 'containsText', 'expectelementtohavetext', 'expectelementtocontaintext'],  category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element text content' },
+  { method: 'expectUrl',      aliases: ['assertUrl', 'toHaveURL', 'urlContains', 'expectpagetohaveurl', 'expectpagetocontainurl'],     category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert current page URL' },
+  { method: 'expectTitle',    aliases: ['assertTitle', 'toHaveTitle', 'expectpagetohavetitle'],               category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert page title' },
+  { method: 'expectCount',    aliases: ['assertCount', 'toHaveCount', 'expectelementtohavecount'],               category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element count' },
+  { method: 'expectEnabled',  aliases: ['assertEnabled', 'toBeEnabled', 'expectelementtobeenabled'],             category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element is enabled' },
+  { method: 'expectHidden',   aliases: ['assertHidden', 'toBeHidden', 'notVisible', 'expectelementtobehidden', 'waitforelementtobehidden'], category: 'Assertions', suggestedUtilClass: 'AssertHelper', description: 'Assert element is hidden' },
 
   // ─── Waits ────────────────────────────────────────────
-  { method: 'waitForSelector', aliases: ['waitFor', 'waitForElement', 'waitVisible'], category: 'Waits', suggestedUtilClass: 'WaitHelper', description: 'Wait for an element to appear' },
-  { method: 'waitForIdle',     aliases: ['waitForNetworkIdle', 'waitForLoad'],        category: 'Waits', suggestedUtilClass: 'WaitHelper', description: 'Wait for network idle state' },
+  { method: 'waitForSelector', aliases: ['waitFor', 'waitForElement', 'waitVisible', 'waitforelementtobeattached', 'waitforelementtobehidden', 'waitforelementtobevisible'], category: 'Waits', suggestedUtilClass: 'WaitHelper', description: 'Wait for an element to appear' },
+  { method: 'waitForIdle',     aliases: ['waitForNetworkIdle', 'waitForLoad', 'waitforpageloadstate'],        category: 'Waits', suggestedUtilClass: 'WaitHelper', description: 'Wait for network idle state' },
   { method: 'sleep',           aliases: ['wait', 'delay'],                            category: 'Waits', suggestedUtilClass: 'WaitHelper', description: 'Hard sleep (use sparingly)' },
 
   // ─── Storage / Cookies ────────────────────────────────
   { method: 'saveStorageState', aliases: ['saveSession', 'saveAuth'],     category: 'Auth', suggestedUtilClass: 'AuthHelper', description: 'Save browser storage state for session reuse' },
-  { method: 'loadStorageState', aliases: ['loadSession', 'restoreAuth'],  category: 'Auth', suggestedUtilClass: 'AuthHelper', description: 'Load a previously saved auth state' },
+  { method: 'loadStorageState', aliases: ['loadSession', 'restoreAuth', 'authenticate'],  category: 'Auth', suggestedUtilClass: 'AuthHelper', description: 'Load a previously saved auth state' },
 
   // ─── Screenshots ─────────────────────────────────────
-  { method: 'screenshot',      aliases: ['takeScreenshot', 'capture'],   category: 'Debugging', suggestedUtilClass: 'DebugHelper', description: 'Take a screenshot' },
+  { method: 'screenshot',      aliases: ['takeScreenshot', 'capture', 'capturescreenshot', 'capturescreenshotwithmetadata'],   category: 'Debugging', suggestedUtilClass: 'DebugHelper', description: 'Take a screenshot' },
   { method: 'saveTrace',       aliases: ['startTrace', 'stopTrace'],     category: 'Debugging', suggestedUtilClass: 'DebugHelper', description: 'Record Playwright trace' },
 
   // ─── Accessibility ───────────────────────────────────
-  { method: 'checkAccessibility', aliases: ['a11yCheck', 'axeCheck', 'runAxe'], category: 'Accessibility', suggestedUtilClass: 'A11yHelper', description: 'Run @axe-core/playwright accessibility scan' },
+  { method: 'checkAccessibility', aliases: ['a11yCheck', 'axeCheck', 'runAxe', 'generatea11yreport', 'quickaccessibilitycheck', 'scanfora11yissues'], category: 'Accessibility', suggestedUtilClass: 'A11yHelper', description: 'Run @axe-core/playwright accessibility scan' },
 ] as const;
 
 export interface UtilAuditEntry {
@@ -90,8 +90,11 @@ export class UtilAuditService {
   public async audit(projectRoot: string, customWrapperPackage?: string): Promise<UtilAuditResult> {
     const config = this.configService.read(projectRoot);
 
+    // Use basePageClass from config if no explicit wrapper provided
+    const wrapper = customWrapperPackage || this.configService.getCustomWrapper(config);
+
     // Run codebase analysis (passing wrapper package for introspection)
-    const analysis = await this.analyzerService.analyze(projectRoot, customWrapperPackage);
+    const analysis = await this.analyzerService.analyze(projectRoot, wrapper);
 
     // Scan conventional utils directories — 'utils', 'helpers', 'support', 'lib'
     // McpConfig.dirs does not define a utils path, so we scan by convention.
