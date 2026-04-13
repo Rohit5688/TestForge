@@ -1,0 +1,18 @@
+{
+  "_README": "Copy this file to users.{env}.json and fill in real credentials. NEVER commit files with real passwords.",
+  "admin": {
+    "username": "admin@yourapp.com",
+    "password": "FILL_IN",
+    "role": "admin"
+  },
+  "standard": {
+    "username": "standard@yourapp.com",
+    "password": "FILL_IN",
+    "role": "standard"
+  },
+  "readonly": {
+    "username": "readonly@yourapp.com",
+    "password": "FILL_IN",
+    "role": "readonly"
+  }
+}

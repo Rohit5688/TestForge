@@ -2,7 +2,7 @@ import { chromium } from 'playwright';
 import { ScreenshotStorage } from '../utils/ScreenshotStorage.js';
 import { SmartDomExtractor } from '../utils/SmartDomExtractor.js';
 export class DomInspectorService {
-    async inspect(url, waitForSelector, storageState, includeIframes, loginMacro, timeoutMs = 30000) {
+    async inspect(url, waitForSelector, storageState, includeIframes, loginMacro, timeoutMs = 30000, enableVisualMode = false) {
         let browser = null;
         try {
             browser = await chromium.launch({ headless: true });
@@ -26,12 +26,15 @@ export class DomInspectorService {
             if (waitForSelector) {
                 await page.waitForSelector(waitForSelector, { timeout: 5000 }).catch(() => { });
             }
-            // --- 18A FIX: Null-safe AOM snapshot with semantic DOM fallback ---
-            // page.accessibility.snapshot() can return null on pages where the AOM tree
-            // is unavailable (CSP-blocked, purely iframe-based, or accessibility-disabled pages).
+            // --- AOM FIX: page.accessibility was removed in Playwright v1.52.
+            // ariaSnapshot() was added in v1.44 but types may lag in the 'playwright' package.
+            // We cast to 'any' to call it safely; it falls back to DOM scraping if unavailable.
             let mainSnapshot = null;
             try {
-                mainSnapshot = await page.accessibility?.snapshot?.() ?? null;
+                const yamlSnapshot = await page.ariaSnapshot?.();
+                if (yamlSnapshot) {
+                    mainSnapshot = { ariaYaml: yamlSnapshot };
+                }
             }
             catch {
                 mainSnapshot = null;
@@ -55,12 +58,19 @@ export class DomInspectorService {
                 });
             }
             const result = { mainFrame: mainSnapshot };
-            try {
-                const buffer = await page.screenshot({ type: 'png', fullPage: false });
-                result.screenshot = ScreenshotStorage.storeBase64(process.cwd(), 'dom-inspect', buffer.toString('base64'));
-            }
-            catch (e) {
-                // Soft fail screenshot capture
+            // Capture full-page screenshot — surfaced in output so VSCode/Cline users can open it
+            // for the same visual context that an integrated browser provides in tools like Antigravity.
+            let screenshotPath;
+            if (enableVisualMode) {
+                try {
+                    const buffer = await page.screenshot({ type: 'png', fullPage: true });
+                    const stored = ScreenshotStorage.storeBase64(process.cwd(), 'dom-inspect', buffer.toString('base64'));
+                    screenshotPath = stored.filePath;
+                    result.screenshot = stored;
+                }
+                catch (e) {
+                    // Soft fail screenshot capture
+                }
             }
             // Optional recursive pass for inner frames (like Stripe fields or generic embedded sites)
             if (includeIframes) {
@@ -69,9 +79,8 @@ export class DomInspectorService {
                     if (frame === page.mainFrame() || frame.isDetached())
                         continue;
                     try {
-                        const fSnap = await frame.accessibility?.snapshot?.() ?? null;
-                        if (fSnap)
-                            result.iframes.push({ url: frame.url(), snapshot: fSnap });
+                        // ariaSnapshot is only available on Page, not Frame — scrape frame URL instead
+                        result.iframes.push({ url: frame.url(), snapshot: 'Frame detected (ariaSnapshot not available on cross-origin frames).' });
                     }
                     catch (e) {
                         result.iframes.push({ url: frame.url(), snapshot: 'Cross-origin or isolated frame restricted.' });
@@ -80,7 +89,7 @@ export class DomInspectorService {
             }
             const rawJson = JSON.stringify(result, null, 2);
             // TASK-62: transform raw AOM JSON → pruned Actionable Markdown
-            return SmartDomExtractor.extract(rawJson, url);
+            return SmartDomExtractor.extract(rawJson, url, screenshotPath);
         }
         catch (error) {
             // --- 18A FIX: Friendly, actionable error messages ---

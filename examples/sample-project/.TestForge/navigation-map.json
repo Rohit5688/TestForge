@@ -1,0 +1,49 @@
+{
+  "nodes": {
+    "/": {
+      "url": "/",
+      "pageName": "Home",
+      "outgoing": [
+        {
+          "triggerSelector": "role=link[name=\"Login\"]",
+          "targetUrl": "/login",
+          "confidence": 0.3,
+          "label": "Login"
+        }
+      ],
+      "visitCount": 0,
+      "lastVisited": "2026-04-13T07:45:14.015Z"
+    },
+    "/login": {
+      "url": "/login",
+      "pageName": "Login",
+      "outgoing": [
+        {
+          "triggerSelector": "role=button[name=\"Submit\"]",
+          "targetUrl": "/dashboard",
+          "confidence": 0.3,
+          "label": "Submit"
+        }
+      ],
+      "visitCount": 0,
+      "lastVisited": "2026-04-13T07:45:14.015Z"
+    },
+    "/dashboard": {
+      "url": "/dashboard",
+      "pageName": "Dashboard",
+      "outgoing": [],
+      "visitCount": 0,
+      "lastVisited": "2026-04-13T07:45:14.015Z"
+    },
+    "/settings": {
+      "url": "/settings",
+      "pageName": "Settings",
+      "outgoing": [],
+      "visitCount": 0,
+      "lastVisited": "2026-04-13T07:45:14.015Z"
+    }
+  },
+  "entryUrl": "",
+  "lastUpdated": "2026-04-13T07:45:14.015Z",
+  "source": "seed"
+}

@@ -156,7 +156,11 @@ export class SmartDomExtractor {
    * @param pageUrl  URL of the page being inspected (for header)
    * @returns        Actionable Markdown string
    */
-  static extract(rawJson: string, pageUrl: string): string {
+  static extract(rawJson: string, pageUrl: string, screenshotPath?: string): string {
+    // Build the screenshot banner for VSCode/Cline users (file:// link they can open directly)
+    const screenshotBanner = screenshotPath
+      ? `\n> 📸 **Full-page screenshot saved** → \`${screenshotPath}\` (open this file to see the visual layout)\n`
+      : '';
     let parsed: { mainFrame?: A11yNode; iframes?: { url: string; snapshot: A11yNode }[]; screenshot?: unknown } | null = null;
 
     try {
@@ -172,9 +176,13 @@ export class SmartDomExtractor {
 
     // Main frame
     if (parsed.mainFrame) {
+      // New ariaYaml envelope: from page.ariaSnapshot() (Playwright v1.44+)
+      if ((parsed.mainFrame as any).ariaYaml) {
+        return screenshotBanner + SmartDomExtractor.extractFromAriaYaml((parsed.mainFrame as any).ariaYaml as string, pageUrl);
+      }
       if ((parsed.mainFrame as any).fallback) {
         // Fallback shape: { fallback: true, elements: [...] }
-        return SmartDomExtractor.extractFromFallbackElements((parsed.mainFrame as any).elements ?? [], pageUrl);
+        return screenshotBanner + SmartDomExtractor.extractFromFallbackElements((parsed.mainFrame as any).elements ?? [], pageUrl);
       }
       collectNodes(parsed.mainFrame, elements, 0);
     }
@@ -188,7 +196,7 @@ export class SmartDomExtractor {
       }
     }
 
-    return renderActionableMarkdown(elements, pageUrl);
+    return screenshotBanner + renderActionableMarkdown(elements, pageUrl);
   }
 
   /** Handle the DOM fallback shape (non-AOM pages) */
@@ -216,6 +224,56 @@ export class SmartDomExtractor {
     if (lines.length === 3) {
       lines.push('_(No actionable elements found in fallback scan.)_');
     }
+
+    return lines.join('\n');
+  }
+
+  /**
+   * Handle ariaYaml envelope from page.ariaSnapshot() (Playwright v1.44+).
+   * The YAML is a human-readable representation of the AOM with indented roles.
+   * We parse it line-by-line to extract actionable elements (role + name pairs).
+   */
+  private static extractFromAriaYaml(yaml: string, pageUrl: string): string {
+    const lines: string[] = [
+      `## Actionable Elements — ${pageUrl} [AOM via ariaSnapshot]`,
+      `> Full Playwright Accessibility Tree. Use these selectors exactly.`,
+      '',
+    ];
+
+    // Regex to match lines like:  - button "Submit" or  - textbox "Email address:"
+    const roleNameRe = /^\s*-\s+(\w+)\s+(?:"([^"]*)"|'([^']*)')?/;
+    let idx = 1;
+    const yamlLines = yaml.split('\n');
+
+    for (const line of yamlLines) {
+      const m = roleNameRe.exec(line);
+      if (!m) continue;
+      const role = (m[1] as string).toLowerCase();
+      const name = (m[2] ?? m[3] ?? '').trim();
+
+      if (SKIP_ROLES.has(role)) continue;
+
+      let selector: string;
+      if (name && ACTIONABLE_ROLES.has(role)) {
+        selector = `role=${role}[name="${capText(name)}"]`;
+      } else if (name) {
+        selector = `[aria-label="${capText(name)}"]`;
+      } else {
+        selector = role;
+      }
+
+      const namePart = name ? ` "${capText(name)}"` : '';
+      lines.push(`[${idx++}] <${role}${namePart}> → \`${selector}\``);
+      if (idx > MAX_NODES + 1) break;
+    }
+
+    // Also include the raw YAML for completeness (capped to keep tokens manageable)
+    const rawCap = yaml.length > 4000 ? yaml.slice(0, 4000) + '\n... [aria snapshot truncated]' : yaml;
+    lines.push('');
+    lines.push('### Raw ARIA Snapshot (for full reference)');
+    lines.push('```yaml');
+    lines.push(rawCap);
+    lines.push('```');
 
     return lines.join('\n');
   }

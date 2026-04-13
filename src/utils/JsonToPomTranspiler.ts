@@ -46,7 +46,8 @@ export class JsonToPomTranspiler {
           lines.push(`    this.page = page;`);
         }
         for (const loc of pom.locators) {
-          lines.push(`    this.${loc.name} = this.page.locator('${loc.selector.replace(/'/g, "\\'")}');`);
+          const safeSelector = (loc.selector ?? '').replace(/'/g, "\\'");
+          lines.push(`    this.${loc.name} = this.page.locator('${safeSelector}');`);
         }
         lines.push(`  }`);
         lines.push('');
@@ -70,6 +71,6 @@ export class JsonToPomTranspiler {
     }
 
     lines.push(`}`);
-    return lines.join('\\n');
+    return lines.join('\n');
   }
 }

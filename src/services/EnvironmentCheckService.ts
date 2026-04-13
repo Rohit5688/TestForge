@@ -2,6 +2,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as os from 'os';
 import * as http from 'http';
 import * as https from 'https';
 import { Questioner } from '../utils/Questioner.js';
@@ -20,6 +21,8 @@ export interface EnvironmentReport {
   ready: boolean;
   checks: EnvironmentCheck[];
   summary: string;
+  failCount: number;
+  warnCount: number;
 }
 
 /**
@@ -31,6 +34,9 @@ export class EnvironmentCheckService {
 
   public async check(projectRoot: string, baseUrl?: string): Promise<EnvironmentReport> {
     const checks: EnvironmentCheck[] = [];
+    
+    // Parse individual env vars from .env if it exists
+    const localEnv = this.loadLocalEnv(projectRoot);
 
     // 1. Node.js version
     checks.push(await this.checkNode());
@@ -70,7 +76,39 @@ export class EnvironmentCheckService {
     const ready = failing.length === 0;
     const summary = this.buildSummary(checks, ready, failing.length, warnings.length) + ExtensionLoader.loadExtensionsForPrompt(projectRoot);
 
-    return { ready, checks, summary };
+    return { 
+      ready, 
+      checks, 
+      summary,
+      failCount: failing.length,
+      warnCount: warnings.length
+    };
+  }
+
+  private loadLocalEnv(projectRoot: string): Record<string, string> {
+    const envPath = path.join(projectRoot, '.env');
+    const vars: Record<string, string> = {};
+    if (fs.existsSync(envPath)) {
+      try {
+        const content = fs.readFileSync(envPath, 'utf8');
+        const lines = content.split('\n');
+        for (const line of lines) {
+          const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+          if (match && match[1]) {
+            let value = match[2] || '';
+            // Remove quotes and comments
+            value = value.replace(/#.*$/, '').trim();
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+              value = value.substring(1, value.length - 1);
+            }
+            vars[match[1]] = value;
+          }
+        }
+      } catch {
+        // Ignore parsing errors
+      }
+    }
+    return vars;
   }
 
   // ─── Individual Checks ─────────────────────────────
@@ -153,13 +191,17 @@ export class EnvironmentCheckService {
   }
 
   private async checkBrowsersDownloaded(projectRoot: string): Promise<EnvironmentCheck> {
-    // Check for local browsers first (project-local install)
+    const localEnv = this.loadLocalEnv(projectRoot);
     const localBrowsersDir = path.join(projectRoot, 'node_modules', 'playwright', '.local-browsers');
-    // Also check global playwright cache
-    const globalCacheDir = path.join(
+    const home = os.homedir();
+    
+    const globalCacheDir = localEnv['PLAYWRIGHT_BROWSERS_PATH'] ?? 
       process.env['PLAYWRIGHT_BROWSERS_PATH'] ??
-      path.join(process.env['HOME'] ?? process.env['USERPROFILE'] ?? '', '.cache', 'ms-playwright')
-    );
+      (process.platform === 'win32'
+        ? path.join(process.env['LOCALAPPDATA'] ?? path.join(home, 'AppData', 'Local'), 'ms-playwright')
+        : process.platform === 'darwin'
+          ? path.join(home, 'Library', 'Caches', 'ms-playwright')
+          : path.join(home, '.cache', 'ms-playwright'));
 
     if (fs.existsSync(localBrowsersDir) || fs.existsSync(globalCacheDir)) {
       const dirs = fs.existsSync(localBrowsersDir)

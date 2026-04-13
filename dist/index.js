@@ -494,6 +494,7 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
     {
         const { url, waitForSelector, storageState, includeIframes, loginMacro, projectRoot } = args;
         let sessionTimeout = 30000;
+        let enableVisualMode = false;
         if (projectRoot) {
             const preFlight = PreFlightService.getInstance();
             const report = await preFlight.runChecks(projectRoot);
@@ -503,10 +504,11 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
             try {
                 const config = mcpConfig.read(projectRoot);
                 sessionTimeout = config.timeouts?.sessionStart ?? 30000;
+                enableVisualMode = config.enableVisualExploration ?? false;
             }
             catch { /* ignore */ }
         }
-        const domTree = await domInspector.inspect(url, waitForSelector, storageState, includeIframes, loginMacro, sessionTimeout);
+        const domTree = await domInspector.inspect(url, waitForSelector, storageState, includeIframes, loginMacro, sessionTimeout, enableVisualMode);
         // TASK-67: Record DOM scan for context compression
         ContextManager.getInstance().recordScan(url, domTree);
         const _domBudgetFooter = TokenBudgetService.getInstance().trackToolCall('inspect_page_dom', url, domTree);

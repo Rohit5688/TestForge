@@ -155,10 +155,10 @@ ${memoryPrompt}
 - Step definitions MUST be defined using \`playwright-bdd\`, not standard Cucumber:
   \`\`\`typescript
   import { createBdd } from 'playwright-bdd';
-  import { test } from '@playwright/test';
-  const { Given, When, Then } = createBdd(test);
+  const { Given, When, Then } = createBdd();
   \`\`\`
-- Standard Playwright APIs (test, expect, Page, Locator, etc.) MUST be imported from \`@playwright/test\`.
+- CRITICAL: \`createBdd()\` takes NO arguments. NEVER write \`createBdd(test)\` — this is a common mistake that causes a runtime error.
+- Standard Playwright APIs (expect, Page, Locator, etc.) MUST be imported from \`@playwright/test\`. Fixtures (\`page\`, custom fixtures) are injected via step destructuring: \`async ({ page, myPage }) => {}\`.
 - NEVER import \`test\` or \`expect\` from \`playwright-bdd\` — they belong to \`@playwright/test\`, which is installed implicitly by \`playwright-bdd\`.
 - Do NOT import from \`@cucumber/cucumber\`.
 - In your explanation string, remind the user that they must run \`npm test\` to generate the test files and execute them.

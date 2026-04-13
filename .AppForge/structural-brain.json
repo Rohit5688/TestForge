@@ -1,0 +1,951 @@
+{
+  "project": "AppForge",
+  "analyzed_at": "2026-04-14T00:35:02",
+  "god_nodes": [
+    {
+      "id": "codebaseanalyzerservice_codebaseanalyzerservice",
+      "label": "CodebaseAnalyzerService",
+      "edges": 19
+    },
+    {
+      "id": "navigationgraphservice_navigationgraphservice",
+      "label": "NavigationGraphService",
+      "edges": 18
+    },
+    {
+      "id": "structuralbrainservice_structuralbrainservice",
+      "label": "StructuralBrainService",
+      "edges": 14
+    },
+    {
+      "id": "environmentcheckservice_environmentcheckservice",
+      "label": "EnvironmentCheckService",
+      "edges": 12
+    },
+    {
+      "id": "preflightservice_preflightservice",
+      "label": "PreFlightService",
+      "edges": 12
+    },
+    {
+      "id": "connection_mcpconnection",
+      "label": "MCPConnection",
+      "edges": 11
+    },
+    {
+      "id": "userstoreservice_userstoreservice",
+      "label": "UserStoreService",
+      "edges": 11
+    },
+    {
+      "id": "contextmanager_contextmanager",
+      "label": "ContextManager",
+      "edges": 10
+    },
+    {
+      "id": "observabilityservice_observabilityservice",
+      "label": "ObservabilityService",
+      "edges": 10
+    },
+    {
+      "id": "projectsetupservice_projectsetupservice",
+      "label": "ProjectSetupService",
+      "edges": 10
+    }
+  ],
+  "surprising_connections": [],
+  "suggested_questions": [
+    {
+      "type": "isolated_nodes",
+      "question": "What connects `Lightweight connection handling for MCP servers.`, `Base class for MCP server connections.`, `Create the connection context based on connection type.` to the rest of the system?",
+      "why": "21 weakly-connected nodes found - possible documentation gaps or missing edges."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 0` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.1 - nodes in this community are weakly interconnected."
+    },
+    {
+      "type": "low_cohesion",
+      "question": "Should `Community 3` be split into smaller, more focused modules?",
+      "why": "Cohesion score 0.14 - nodes in this community are weakly interconnected."
+    }
+  ],
+  "communities": {
+    "0": [
+      "abc",
+      "connection",
+      "connection_create_connection",
+      "connection_create_context",
+      "connection_mcpconnection",
+      "connection_mcpconnection_aenter",
+      "connection_mcpconnection_aexit",
+      "connection_mcpconnection_call_tool",
+      "connection_mcpconnection_init",
+      "connection_mcpconnection_list_tools",
+      "connection_mcpconnectionhttp",
+      "connection_mcpconnectionhttp_create_context",
+      "connection_mcpconnectionhttp_init",
+      "connection_mcpconnectionsse",
+      "connection_mcpconnectionsse_create_context",
+      "connection_mcpconnectionsse_init",
+      "connection_mcpconnectionstdio",
+      "connection_mcpconnectionstdio_create_context",
+      "connection_mcpconnectionstdio_init",
+      "connection_rationale_1",
+      "connection_rationale_101",
+      "connection_rationale_120",
+      "connection_rationale_14",
+      "connection_rationale_25",
+      "connection_rationale_49",
+      "connection_rationale_56",
+      "connection_rationale_68",
+      "connection_rationale_74",
+      "connection_rationale_89"
+    ],
+    "1": [
+      "codebaseanalyzerservice",
+      "codebaseanalyzerservice_codebaseanalyzerservice",
+      "codebaseanalyzerservice_codebaseanalyzerservice_analyze",
+      "codebaseanalyzerservice_codebaseanalyzerservice_detectnamingconvention",
+      "codebaseanalyzerservice_codebaseanalyzerservice_directoryexists",
+      "codebaseanalyzerservice_codebaseanalyzerservice_extractpublicmethods",
+      "codebaseanalyzerservice_codebaseanalyzerservice_extractsamplestructure",
+      "codebaseanalyzerservice_codebaseanalyzerservice_extractsteps",
+      "codebaseanalyzerservice_codebaseanalyzerservice_fileexists",
+      "codebaseanalyzerservice_codebaseanalyzerservice_getwrapperversion",
+      "codebaseanalyzerservice_codebaseanalyzerservice_hasclasslocatorsfast",
+      "codebaseanalyzerservice_codebaseanalyzerservice_introspectwrapper",
+      "codebaseanalyzerservice_codebaseanalyzerservice_loadwrappercachefromfile",
+      "codebaseanalyzerservice_codebaseanalyzerservice_readallfiles",
+      "codebaseanalyzerservice_codebaseanalyzerservice_resolveandextractwrappermethods",
+      "codebaseanalyzerservice_codebaseanalyzerservice_resolvepackageroot",
+      "codebaseanalyzerservice_codebaseanalyzerservice_savewrappercachetofile",
+      "codebaseanalyzerservice_codebaseanalyzerservice_scanforduplicateplaywrightinstallations",
+      "codebaseanalyzerservice_codebaseanalyzerservice_scanwrapper",
+      "codebaseanalyzerservice_codebaseanalyzerservice_scanwrapperdir"
+    ],
+    "2": [
+      "navigationgraphservice",
+      "navigationgraphservice_navigationgraphservice",
+      "navigationgraphservice_navigationgraphservice_addedge",
+      "navigationgraphservice_navigationgraphservice_buildfromstaticanalysis",
+      "navigationgraphservice_navigationgraphservice_buildseedgraph",
+      "navigationgraphservice_navigationgraphservice_constructor",
+      "navigationgraphservice_navigationgraphservice_derivepagename",
+      "navigationgraphservice_navigationgraphservice_discoverappflow",
+      "navigationgraphservice_navigationgraphservice_ensurenode",
+      "navigationgraphservice_navigationgraphservice_exportmermaiddiagram",
+      "navigationgraphservice_navigationgraphservice_getgraph",
+      "navigationgraphservice_navigationgraphservice_getknownpathstext",
+      "navigationgraphservice_navigationgraphservice_getknownscreens",
+      "navigationgraphservice_navigationgraphservice_getmapsource",
+      "navigationgraphservice_navigationgraphservice_load",
+      "navigationgraphservice_navigationgraphservice_normalizeurl",
+      "navigationgraphservice_navigationgraphservice_save",
+      "navigationgraphservice_navigationgraphservice_walkfiles",
+      "navigationgraphservice_navigationgraphservice_writemd"
+    ],
+    "3": [
+      "basepage",
+      "basepage_basepage",
+      "basepage_basepage_checkaccessibility",
+      "basepage_basepage_closepopups",
+      "basepage_basepage_constructor",
+      "basepage_basepage_highlightelement",
+      "basepage_basepage_navigate",
+      "basepage_basepage_waitforstable",
+      "jquerydatepickerpage",
+      "jquerydatepickerpage_jquerydatepickerpage",
+      "jquerydatepickerpage_jquerydatepickerpage_constructor",
+      "jquerydatepickerpage_jquerydatepickerpage_navigatetodatepicker",
+      "jquerydatepickerpage_jquerydatepickerpage_selectdate",
+      "jquerydatepickerpage_jquerydatepickerpage_selectdisplayinline",
+      "jquerydatepickerpage_jquerydatepickerpage_takescreenshot",
+      "jquerydatepickerpage_jquerydatepickerpage_verifydateselected"
+    ],
+    "4": [
+      "structuralbrainservice",
+      "structuralbrainservice_structuralbrainservice",
+      "structuralbrainservice_structuralbrainservice_brainfile",
+      "structuralbrainservice_structuralbrainservice_buildimportgraph",
+      "structuralbrainservice_structuralbrainservice_findtypescriptfiles",
+      "structuralbrainservice_structuralbrainservice_formatpreflightwarning",
+      "structuralbrainservice_structuralbrainservice_getgodnodes",
+      "structuralbrainservice_structuralbrainservice_getinstance",
+      "structuralbrainservice_structuralbrainservice_getwarning",
+      "structuralbrainservice_structuralbrainservice_identifygodnodes",
+      "structuralbrainservice_structuralbrainservice_invalidatecache",
+      "structuralbrainservice_structuralbrainservice_loadfromdisk",
+      "structuralbrainservice_structuralbrainservice_resolveimport",
+      "structuralbrainservice_structuralbrainservice_savetodisk",
+      "structuralbrainservice_structuralbrainservice_scanproject"
+    ],
+    "5": [
+      "evaluation",
+      "evaluation_deterministicverifier",
+      "evaluation_deterministicverifier_get_call_error",
+      "evaluation_deterministicverifier_get_negative_args",
+      "evaluation_deterministicverifier_get_tool",
+      "evaluation_deterministicverifier_init",
+      "evaluation_deterministicverifier_initialize",
+      "evaluation_deterministicverifier_verify_task",
+      "evaluation_main",
+      "evaluation_parse_evaluation_file",
+      "evaluation_rationale_1",
+      "evaluation_rationale_265",
+      "evaluation_rationale_279",
+      "evaluation_rationale_29"
+    ],
+    "6": [
+      "environmentcheckservice",
+      "environmentcheckservice_environmentcheckservice",
+      "environmentcheckservice_environmentcheckservice_buildsummary",
+      "environmentcheckservice_environmentcheckservice_check",
+      "environmentcheckservice_environmentcheckservice_checkbaseurl",
+      "environmentcheckservice_environmentcheckservice_checkbrowsersdownloaded",
+      "environmentcheckservice_environmentcheckservice_checkenvbaseurl",
+      "environmentcheckservice_environmentcheckservice_checkmcpconfig",
+      "environmentcheckservice_environmentcheckservice_checknode",
+      "environmentcheckservice_environmentcheckservice_checknodemodules",
+      "environmentcheckservice_environmentcheckservice_checkplaywrightconfig",
+      "environmentcheckservice_environmentcheckservice_checkplaywrightinstalled",
+      "environmentcheckservice_environmentcheckservice_loadlocalenv"
+    ],
+    "7": [
+      "preflightservice",
+      "preflightservice_preflightservice",
+      "preflightservice_preflightservice_buildreport",
+      "preflightservice_preflightservice_checkbaseurl",
+      "preflightservice_preflightservice_checkbrowsersdownloaded",
+      "preflightservice_preflightservice_checkconfigfile",
+      "preflightservice_preflightservice_checkplaywrightinstalled",
+      "preflightservice_preflightservice_clearcache",
+      "preflightservice_preflightservice_formatreport",
+      "preflightservice_preflightservice_getenvbaseurl",
+      "preflightservice_preflightservice_getinstance",
+      "preflightservice_preflightservice_loadlocalenv",
+      "preflightservice_preflightservice_runchecks"
+    ],
+    "8": [
+      "userstoreservice",
+      "userstoreservice_detectapikeyfield",
+      "userstoreservice_userstoreservice",
+      "userstoreservice_userstoreservice_addroles",
+      "userstoreservice_userstoreservice_assertnoapikeyfields",
+      "userstoreservice_userstoreservice_assertpathisgitignored",
+      "userstoreservice_userstoreservice_ensureenvgitignored",
+      "userstoreservice_userstoreservice_ensuregitignore",
+      "userstoreservice_userstoreservice_generateuserhelper",
+      "userstoreservice_userstoreservice_read",
+      "userstoreservice_userstoreservice_scaffold",
+      "userstoreservice_userstoreservice_storefile",
+      "userstoreservice_userstoreservice_updateexamplefile"
+    ],
+    "9": [
+      "projectsetupservice",
+      "projectsetupservice_projectsetupservice",
+      "projectsetupservice_projectsetupservice_constructor",
+      "projectsetupservice_projectsetupservice_generateconfigtemplate",
+      "projectsetupservice_projectsetupservice_repairproject",
+      "projectsetupservice_projectsetupservice_scaffold",
+      "projectsetupservice_projectsetupservice_scaffoldmcpconfigreference",
+      "projectsetupservice_projectsetupservice_scaffoldpromptcheatbook",
+      "projectsetupservice_projectsetupservice_scanconfigureme",
+      "projectsetupservice_projectsetupservice_setup",
+      "projectsetupservice_projectsetupservice_syncconfigschema",
+      "projectsetupservice_resolveexe"
+    ],
+    "10": [
+      "contextmanager",
+      "contextmanager_contextmanager",
+      "contextmanager_contextmanager_countelements",
+      "contextmanager_contextmanager_extractkeyselectors",
+      "contextmanager_contextmanager_getcompactedhistory",
+      "contextmanager_contextmanager_getinstance",
+      "contextmanager_contextmanager_getlatesturl",
+      "contextmanager_contextmanager_getscancount",
+      "contextmanager_contextmanager_geturlcount",
+      "contextmanager_contextmanager_recordscan",
+      "contextmanager_contextmanager_reset"
+    ],
+    "11": [
+      "observabilityservice",
+      "observabilityservice_observabilityservice",
+      "observabilityservice_observabilityservice_constructor",
+      "observabilityservice_observabilityservice_emit",
+      "observabilityservice_observabilityservice_getinstance",
+      "observabilityservice_observabilityservice_getstream",
+      "observabilityservice_observabilityservice_sanitize",
+      "observabilityservice_observabilityservice_toolend",
+      "observabilityservice_observabilityservice_toolerror",
+      "observabilityservice_observabilityservice_toolstart",
+      "observabilityservice_observabilityservice_warning"
+    ],
+    "12": [
+      "selfhealingservice",
+      "selfhealingservice_selfhealingservice",
+      "selfhealingservice_selfhealingservice_analyzefailure",
+      "selfhealingservice_selfhealingservice_buildhealinstruction",
+      "selfhealingservice_selfhealingservice_classifyfailure",
+      "selfhealingservice_selfhealingservice_constructor",
+      "selfhealingservice_selfhealingservice_extractfailedfiles",
+      "selfhealingservice_selfhealingservice_extractfailedlines",
+      "selfhealingservice_selfhealingservice_extractfailedlocators",
+      "selfhealingservice_selfhealingservice_notifyhealsuccess",
+      "selfhealingservice_selfhealingservice_resetattempts"
+    ],
+    "13": [
+      "dnatrackerservice",
+      "dnatrackerservice_dnatrackerservice",
+      "dnatrackerservice_dnatrackerservice_computevisualhash",
+      "dnatrackerservice_dnatrackerservice_findnearmatch",
+      "dnatrackerservice_dnatrackerservice_getstorepath",
+      "dnatrackerservice_dnatrackerservice_getsummary",
+      "dnatrackerservice_dnatrackerservice_read",
+      "dnatrackerservice_dnatrackerservice_recordsuccessfulheal",
+      "dnatrackerservice_dnatrackerservice_track",
+      "dnatrackerservice_dnatrackerservice_write"
+    ],
+    "14": [
+      "mcpconfigservice",
+      "mcpconfigservice_mcpconfigservice",
+      "mcpconfigservice_mcpconfigservice_deepmerge",
+      "mcpconfigservice_mcpconfigservice_getauthstrategy",
+      "mcpconfigservice_mcpconfigservice_getcustomwrapper",
+      "mcpconfigservice_mcpconfigservice_preview",
+      "mcpconfigservice_mcpconfigservice_read",
+      "mcpconfigservice_mcpconfigservice_readraw",
+      "mcpconfigservice_mcpconfigservice_scaffold",
+      "mcpconfigservice_mcpconfigservice_write"
+    ],
+    "15": [
+      "envmanagerservice",
+      "envmanagerservice_envmanagerservice",
+      "envmanagerservice_envmanagerservice_ensuregitignore",
+      "envmanagerservice_envmanagerservice_persistenvfile",
+      "envmanagerservice_envmanagerservice_read",
+      "envmanagerservice_envmanagerservice_scaffold",
+      "envmanagerservice_envmanagerservice_scaffoldmulti",
+      "envmanagerservice_envmanagerservice_updateenvexample",
+      "envmanagerservice_envmanagerservice_write"
+    ],
+    "16": [
+      "smartdomextractor",
+      "smartdomextractor_captext",
+      "smartdomextractor_collectnodes",
+      "smartdomextractor_deriveselector",
+      "smartdomextractor_renderactionablemarkdown",
+      "smartdomextractor_smartdomextractor",
+      "smartdomextractor_smartdomextractor_extract",
+      "smartdomextractor_smartdomextractor_extractfromariayaml",
+      "smartdomextractor_smartdomextractor_extractfromfallbackelements"
+    ],
+    "17": [
+      "filewriterservice",
+      "filewriterservice_filewriterservice",
+      "filewriterservice_filewriterservice_loadmanifest",
+      "filewriterservice_filewriterservice_replaceinfile",
+      "filewriterservice_filewriterservice_savemanifest",
+      "filewriterservice_filewriterservice_sha256",
+      "filewriterservice_filewriterservice_validateandwrite",
+      "filewriterservice_filewriterservice_writefiles"
+    ],
+    "18": [
+      "learningservice",
+      "learningservice_learningservice",
+      "learningservice_learningservice_exporttomarkdown",
+      "learningservice_learningservice_forget",
+      "learningservice_learningservice_getknowledge",
+      "learningservice_learningservice_getknowledgepromptinjection",
+      "learningservice_learningservice_getstoragepath",
+      "learningservice_learningservice_learn"
+    ],
+    "19": [
+      "locatorauditservice",
+      "locatorauditservice_locatorauditservice",
+      "locatorauditservice_locatorauditservice_audit",
+      "locatorauditservice_locatorauditservice_classifyentry",
+      "locatorauditservice_locatorauditservice_extractclassname",
+      "locatorauditservice_locatorauditservice_extractclassranges",
+      "locatorauditservice_locatorauditservice_generatemarkdownreport",
+      "locatorauditservice_locatorauditservice_listtsfiles"
+    ],
+    "20": [
+      "errorsystem",
+      "errorsystem_ismcperror",
+      "errorsystem_isretryableerror",
+      "errorsystem_mcperror",
+      "errorsystem_mcperror_constructor",
+      "errorsystem_mcperror_tomcpresponse",
+      "errorsystem_mcperror_tostring",
+      "errorsystem_tomcperrorresponse"
+    ],
+    "21": [
+      "shellsecurityengine",
+      "shellsecurityengine_shellsecurityengine",
+      "shellsecurityengine_shellsecurityengine_checkarg",
+      "shellsecurityengine_shellsecurityengine_formatviolations",
+      "shellsecurityengine_shellsecurityengine_isknownsafepath",
+      "shellsecurityengine_shellsecurityengine_validateargs",
+      "shellsecurityengine_shellsecurityengine_validatefilepath",
+      "shellsecurityengine_shellsecurityengine_validatenpmscript"
+    ],
+    "22": [
+      "stringmatcher",
+      "stringmatcher_stringmatcher",
+      "stringmatcher_stringmatcher_areequivalent",
+      "stringmatcher_stringmatcher_findmatch",
+      "stringmatcher_stringmatcher_fuzzyreplace",
+      "stringmatcher_stringmatcher_normalize",
+      "stringmatcher_stringmatcher_normalizequotes",
+      "stringmatcher_stringmatcher_normalizewithmap"
+    ],
+    "23": [
+      "playwrightsessionservice",
+      "playwrightsessionservice_playwrightsessionservice",
+      "playwrightsessionservice_playwrightsessionservice_endsession",
+      "playwrightsessionservice_playwrightsessionservice_getpage",
+      "playwrightsessionservice_playwrightsessionservice_navigate",
+      "playwrightsessionservice_playwrightsessionservice_startsession",
+      "playwrightsessionservice_playwrightsessionservice_verifyselector"
+    ],
+    "24": [
+      "errordistiller",
+      "errordistiller_classifyerror",
+      "errordistiller_errordistiller",
+      "errordistiller_errordistiller_distill",
+      "errordistiller_errordistiller_format",
+      "errordistiller_extractselector",
+      "errordistiller_extractstep"
+    ],
+    "25": [
+      "filesuggester",
+      "filesuggester_filesuggester",
+      "filesuggester_filesuggester_enhanceerror",
+      "filesuggester_filesuggester_formatsuggestions",
+      "filesuggester_filesuggester_levenshtein",
+      "filesuggester_filesuggester_listfiles",
+      "filesuggester_filesuggester_suggest"
+    ],
+    "26": [
+      "ajaxtoolkitpage",
+      "ajaxtoolkitpage_ajaxtoolkitpage",
+      "ajaxtoolkitpage_ajaxtoolkitpage_navigatedirectly",
+      "ajaxtoolkitpage_ajaxtoolkitpage_navigatetohtmleditor",
+      "ajaxtoolkitpage_ajaxtoolkitpage_replacedemotext",
+      "ajaxtoolkitpage_ajaxtoolkitpage_verifytextpresent"
+    ],
+    "27": [
+      "jquerysortablepage",
+      "jquerysortablepage_jquerysortablepage",
+      "jquerysortablepage_jquerysortablepage_dragitemtoposition",
+      "jquerysortablepage_jquerysortablepage_itemat",
+      "jquerysortablepage_jquerysortablepage_verifyreorder",
+      "jquerysortablepage_jquerysortablepage_waitforsortablelist"
+    ],
+    "28": [
+      "loginpage",
+      "loginpage_dashboardpage",
+      "loginpage_dashboardpage_isvisible",
+      "loginpage_loginpage",
+      "loginpage_loginpage_login",
+      "loginpage_loginpage_navigate"
+    ],
+    "29": [
+      "filestateservice",
+      "filestateservice_filestateservice",
+      "filestateservice_filestateservice_clearstate",
+      "filestateservice_filestateservice_recordread",
+      "filestateservice_filestateservice_sha256",
+      "filestateservice_filestateservice_validatewritestate"
+    ],
+    "30": [
+      "hybridpromptengine",
+      "hybridpromptengine_hybridpromptengine",
+      "hybridpromptengine_hybridpromptengine_buildhybridblock",
+      "hybridpromptengine_hybridpromptengine_buildsnippet",
+      "hybridpromptengine_hybridpromptengine_formatchampionblock",
+      "hybridpromptengine_hybridpromptengine_selectchampion"
+    ],
+    "31": [
+      "projectmaintenanceservice",
+      "projectmaintenanceservice_projectmaintenanceservice",
+      "projectmaintenanceservice_projectmaintenanceservice_ensureuptodate",
+      "projectmaintenanceservice_projectmaintenanceservice_repairproject",
+      "projectmaintenanceservice_projectmaintenanceservice_upgradeproject",
+      "projectmaintenanceservice_resolveexe"
+    ],
+    "32": [
+      "suitesummaryservice",
+      "suitesummaryservice_suitesummaryservice",
+      "suitesummaryservice_suitesummaryservice_buildplainenglish",
+      "suitesummaryservice_suitesummaryservice_findfeaturefiles",
+      "suitesummaryservice_suitesummaryservice_parsefeaturefile",
+      "suitesummaryservice_suitesummaryservice_summarize"
+    ],
+    "33": [
+      "metrics",
+      "metrics_metrics",
+      "metrics_metrics_getsummary",
+      "metrics_metrics_recordfailure",
+      "metrics_metrics_recordstart",
+      "metrics_metrics_registershutdownhook"
+    ],
+    "34": [
+      "securityutils",
+      "securityutils_auditgeneratedcode",
+      "securityutils_safejsonparse",
+      "securityutils_sanitizeoutput",
+      "securityutils_sanitizeshellarg",
+      "securityutils_validateprojectpath"
+    ],
+    "35": [
+      "ecommercehomepage",
+      "ecommercehomepage_ecommercehomepage",
+      "ecommercehomepage_ecommercehomepage_navigate",
+      "ecommercehomepage_ecommercehomepage_searchfor",
+      "ecommercehomepage_ecommercehomepage_shopbycategory"
+    ],
+    "36": [
+      "ecommerceproductpage",
+      "ecommerceproductpage_ecommerceproductpage",
+      "ecommerceproductpage_ecommerceproductpage_addtocart",
+      "ecommerceproductpage_ecommerceproductpage_addtocartbtn",
+      "ecommerceproductpage_ecommerceproductpage_viewcart"
+    ],
+    "37": [
+      "googlepage",
+      "googlepage_googlepage",
+      "googlepage_googlepage_clicksearchresult",
+      "googlepage_googlepage_navigateto",
+      "googlepage_googlepage_searchfor"
+    ],
+    "38": [
+      "saucedemopage",
+      "saucedemopage_saucedemopage",
+      "saucedemopage_saucedemopage_isinventoryvisible",
+      "saucedemopage_saucedemopage_login",
+      "saucedemopage_saucedemopage_navigate"
+    ],
+    "39": [
+      "servicecontainer",
+      "servicecontainer_servicecontainer",
+      "servicecontainer_servicecontainer_register",
+      "servicecontainer_servicecontainer_reset",
+      "servicecontainer_servicecontainer_resolve"
+    ],
+    "40": [
+      "analyticsservice",
+      "analyticsservice_analyticsservice",
+      "analyticsservice_analyticsservice_analyzecoveragegaps",
+      "analyticsservice_analyticsservice_generatejirabugprompt",
+      "analyticsservice_analyticsservice_generatercaprompt"
+    ],
+    "41": [
+      "bugreportservice",
+      "bugreportservice_bugreportservice",
+      "bugreportservice_bugreportservice_classifyseverity",
+      "bugreportservice_bugreportservice_extracterrorsummary",
+      "bugreportservice_bugreportservice_generatebugreport"
+    ],
+    "42": [
+      "orchestrationservice",
+      "orchestrationservice_orchestrationservice",
+      "orchestrationservice_orchestrationservice_constructor",
+      "orchestrationservice_orchestrationservice_createtestatomically",
+      "orchestrationservice_orchestrationservice_healandverifyatomically"
+    ],
+    "43": [
+      "sandboxengine",
+      "sandboxengine_createsafeconsole",
+      "sandboxengine_executesandbox",
+      "sandboxengine_resolvesafepath",
+      "sandboxengine_validatescript"
+    ],
+    "44": [
+      "testgenerationservice",
+      "testgenerationservice_testgenerationservice",
+      "testgenerationservice_testgenerationservice_compressfeaturefiles",
+      "testgenerationservice_testgenerationservice_generatepromptinstruction",
+      "testgenerationservice_testgenerationservice_injectnavgraph"
+    ],
+    "45": [
+      "utilauditservice",
+      "utilauditservice_utilauditservice",
+      "utilauditservice_utilauditservice_audit",
+      "utilauditservice_utilauditservice_extractmethodsfromfile",
+      "utilauditservice_utilauditservice_scanutilsdir"
+    ],
+    "46": [
+      "fileguard",
+      "fileguard_fileguard",
+      "fileguard_fileguard_hasbinaryzero",
+      "fileguard_fileguard_isbinary",
+      "fileguard_fileguard_readtextfilesafely"
+    ],
+    "47": [
+      "heuristicmatcher",
+      "heuristicmatcher_heuristicmatcher",
+      "heuristicmatcher_heuristicmatcher_findbestmatches",
+      "heuristicmatcher_heuristicmatcher_lcslength",
+      "heuristicmatcher_heuristicmatcher_similarity"
+    ],
+    "48": [
+      "questioner",
+      "questioner_clarificationrequired",
+      "questioner_clarificationrequired_constructor",
+      "questioner_questioner",
+      "questioner_questioner_clarify"
+    ],
+    "49": [
+      "requesttracer",
+      "requesttracer_requesttracer",
+      "requesttracer_requesttracer_getcurrentid",
+      "requesttracer_requesttracer_startrequest",
+      "requesttracer_requesttracer_tag"
+    ],
+    "50": [
+      "retryengine",
+      "retryengine_istransienterror",
+      "retryengine_sleep",
+      "retryengine_withretry",
+      "retryengine_withretrywrapper"
+    ],
+    "51": [
+      "index",
+      "index_getnavservice",
+      "index_startserver",
+      "index_wrappedhandler"
+    ],
+    "52": [
+      "coverageanalysisservice",
+      "coverageanalysisservice_coverageanalysisservice",
+      "coverageanalysisservice_coverageanalysisservice_analyzecoverage",
+      "coverageanalysisservice_coverageanalysisservice_getcoverageprompt"
+    ],
+    "53": [
+      "dependencyservice",
+      "dependencyservice_dependencyservice",
+      "dependencyservice_dependencyservice_detectimplicitframeworks",
+      "dependencyservice_dependencyservice_parsedependencies"
+    ],
+    "54": [
+      "fewshotlibrary",
+      "fewshotlibrary_fewshotlibrary",
+      "fewshotlibrary_fewshotlibrary_getcotscaffold",
+      "fewshotlibrary_fewshotlibrary_getnegativeexample"
+    ],
+    "55": [
+      "seleniummigrationservice",
+      "seleniummigrationservice_seleniummigrationservice",
+      "seleniummigrationservice_seleniummigrationservice_constructor",
+      "seleniummigrationservice_seleniummigrationservice_generatemigrationprompt"
+    ],
+    "56": [
+      "stagingservice",
+      "stagingservice_stagingservice",
+      "stagingservice_stagingservice_cleanup",
+      "stagingservice_stagingservice_stageandvalidate"
+    ],
+    "57": [
+      "testrunnerservice",
+      "testrunnerservice_testrunnerservice",
+      "testrunnerservice_testrunnerservice_constructor",
+      "testrunnerservice_testrunnerservice_runtests"
+    ],
+    "58": [
+      "errorclassifier",
+      "errorclassifier_errorclassifier",
+      "errorclassifier_errorclassifier_classify",
+      "errorclassifier_errorclassifier_getreasondescription"
+    ],
+    "59": [
+      "screenshotstorage",
+      "screenshotstorage_screenshotstorage",
+      "screenshotstorage_screenshotstorage_getstoragedirectory",
+      "screenshotstorage_screenshotstorage_storebase64"
+    ],
+    "60": [
+      "tsconfigmanager",
+      "tsconfigmanager_tsconfigmanager",
+      "tsconfigmanager_tsconfigmanager_addpathmapping",
+      "tsconfigmanager_tsconfigmanager_ensureparentdirs"
+    ],
+    "61": [
+      "migrate_tools",
+      "migrate_tools_main",
+      "migrate_tools_schematozod"
+    ],
+    "62": [
+      "ecommercecartpage",
+      "ecommercecartpage_ecommercecartpage",
+      "ecommercecartpage_ecommercecartpage_proceedtocheckout"
+    ],
+    "63": [
+      "ecommercecategorypage",
+      "ecommercecategorypage_ecommercecategorypage",
+      "ecommercecategorypage_ecommercecategorypage_selectproduct"
+    ],
+    "64": [
+      "ecommercecheckoutpage",
+      "ecommercecheckoutpage_ecommercecheckoutpage",
+      "ecommercecheckoutpage_ecommercecheckoutpage_verifyoncheckoutpage"
+    ],
+    "65": [
+      "dominspectorservice",
+      "dominspectorservice_dominspectorservice",
+      "dominspectorservice_dominspectorservice_inspect"
+    ],
+    "66": [
+      "fixturedataservice",
+      "fixturedataservice_fixturedataservice",
+      "fixturedataservice_fixturedataservice_generatefixtureprompt"
+    ],
+    "67": [
+      "pipelineservice",
+      "pipelineservice_pipelineservice",
+      "pipelineservice_pipelineservice_generatepipeline"
+    ],
+    "68": [
+      "refactoringservice",
+      "refactoringservice_refactoringservice",
+      "refactoringservice_refactoringservice_generaterefactoringsuggestions"
+    ],
+    "69": [
+      "astscrutinizer",
+      "astscrutinizer_astscrutinizer",
+      "astscrutinizer_astscrutinizer_scrutinize"
+    ],
+    "70": [
+      "extensionloader",
+      "extensionloader_extensionloader",
+      "extensionloader_extensionloader_loadextensionsforprompt"
+    ],
+    "71": [
+      "jsontopomtranspiler",
+      "jsontopomtranspiler_jsontopomtranspiler",
+      "jsontopomtranspiler_jsontopomtranspiler_transpile"
+    ],
+    "72": [
+      "responsehelper",
+      "responsehelper_textresult",
+      "responsehelper_truncate"
+    ],
+    "73": [
+      "test_client",
+      "test_client_main"
+    ],
+    "74": [
+      "user_helper",
+      "user_helper_getuser"
+    ],
+    "75": [
+      "codebaseanalyzerservice_d",
+      "codebaseanalyzerservice_d_codebaseanalyzerservice"
+    ],
+    "76": [
+      "dominspectorservice_d",
+      "dominspectorservice_d_dominspectorservice"
+    ],
+    "77": [
+      "filewriterservice_d",
+      "filewriterservice_d_filewriterservice"
+    ],
+    "78": [
+      "selfhealingservice_d",
+      "selfhealingservice_d_selfhealingservice"
+    ],
+    "79": [
+      "testgenerationservice_d",
+      "testgenerationservice_d_testgenerationservice"
+    ],
+    "80": [
+      "testrunnerservice_d",
+      "testrunnerservice_d_testrunnerservice"
+    ],
+    "81": [
+      "migrated_tools"
+    ],
+    "82": [
+      "patch_descriptions"
+    ],
+    "83": [
+      "playwright_config"
+    ],
+    "84": [
+      "ajax_toolkit_steps"
+    ],
+    "85": [
+      "datepicker_steps"
+    ],
+    "86": [
+      "jquery_sortable_steps"
+    ],
+    "87": [
+      "login_steps"
+    ],
+    "88": [
+      "purchaseflow_steps"
+    ],
+    "89": [
+      "saucedemo_steps"
+    ],
+    "90": [
+      "fix_index"
+    ],
+    "91": [
+      "connection_rationale_22"
+    ],
+    "92": [
+      "index_d"
+    ],
+    "93": [
+      "icodebaseanalyzer_d"
+    ],
+    "94": [
+      "icodebaseanalyzer"
+    ],
+    "95": [
+      "idominspector_d"
+    ],
+    "96": [
+      "idominspector"
+    ],
+    "97": [
+      "itestgenerator_d"
+    ],
+    "98": [
+      "itestgenerator"
+    ],
+    "99": [
+      "itestrunner_d"
+    ],
+    "100": [
+      "itestrunner"
+    ],
+    "101": [
+      "codebaseanalyzerservice_test"
+    ],
+    "102": [
+      "extensionloader_test"
+    ],
+    "103": [
+      "locatorauditservice_test"
+    ],
+    "104": [
+      "sandboxengine_test"
+    ],
+    "105": [
+      "securityutils_test"
+    ]
+  },
+  "cohesion": {
+    "0": 0.1,
+    "1": 0.27,
+    "2": 0.2,
+    "3": 0.14,
+    "4": 0.19,
+    "5": 0.22,
+    "6": 0.31,
+    "7": 0.24,
+    "8": 0.31,
+    "9": 0.26,
+    "10": 0.22,
+    "11": 0.33,
+    "12": 0.29,
+    "13": 0.4,
+    "14": 0.33,
+    "15": 0.42,
+    "16": 0.47,
+    "17": 0.43,
+    "18": 0.5,
+    "19": 0.43,
+    "20": 0.36,
+    "21": 0.32,
+    "22": 0.36,
+    "23": 0.38,
+    "24": 0.48,
+    "25": 0.48,
+    "26": 0.33,
+    "27": 0.4,
+    "28": 0.33,
+    "29": 0.47,
+    "30": 0.53,
+    "31": 0.47,
+    "32": 0.53,
+    "33": 0.33,
+    "34": 0.33,
+    "35": 0.4,
+    "36": 0.4,
+    "37": 0.4,
+    "38": 0.4,
+    "39": 0.4,
+    "40": 0.4,
+    "41": 0.6,
+    "42": 0.4,
+    "43": 0.6,
+    "44": 0.6,
+    "45": 0.6,
+    "46": 0.6,
+    "47": 0.5,
+    "48": 0.4,
+    "49": 0.5,
+    "50": 0.6,
+    "51": 0.5,
+    "52": 0.5,
+    "53": 0.5,
+    "54": 0.5,
+    "55": 0.5,
+    "56": 0.67,
+    "57": 0.5,
+    "58": 0.67,
+    "59": 0.67,
+    "60": 0.5,
+    "61": 1.0,
+    "62": 0.67,
+    "63": 0.67,
+    "64": 0.67,
+    "65": 0.67,
+    "66": 0.67,
+    "67": 0.67,
+    "68": 0.67,
+    "69": 0.67,
+    "70": 0.67,
+    "71": 0.67,
+    "72": 0.67,
+    "73": 1.0,
+    "74": 1.0,
+    "75": 1.0,
+    "76": 1.0,
+    "77": 1.0,
+    "78": 1.0,
+    "79": 1.0,
+    "80": 1.0,
+    "81": 1.0,
+    "82": 1.0,
+    "83": 1.0,
+    "84": 1.0,
+    "85": 1.0,
+    "86": 1.0,
+    "87": 1.0,
+    "88": 1.0,
+    "89": 1.0,
+    "90": 1.0,
+    "91": 1.0,
+    "92": 1.0,
+    "93": 1.0,
+    "94": 1.0,
+    "95": 1.0,
+    "96": 1.0,
+    "97": 1.0,
+    "98": 1.0,
+    "99": 1.0,
+    "100": 1.0,
+    "101": 1.0,
+    "102": 1.0,
+    "103": 1.0,
+    "104": 1.0,
+    "105": 1.0
+  }
+}

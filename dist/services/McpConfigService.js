@@ -26,6 +26,7 @@ export const DEFAULT_CONFIG = {
     additionalDataPaths: [],
     a11yStandards: ['wcag2aa'],
     a11yReportPath: 'test-results/a11y-report.json',
+    enableVisualExploration: false,
 };
 /**
  * McpConfigService — Phase 23 + TASK-04 + TASK-12

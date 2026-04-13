@@ -2,6 +2,7 @@ import * as http from 'http';
 import * as https from 'https';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 
@@ -120,11 +121,16 @@ export class PreFlightService {
   }
 
   private async checkBrowsersDownloaded(projectRoot: string): Promise<PreFlightCheck> {
+    const localEnv = this.loadLocalEnv(projectRoot);
     const localBrowsersDir = path.join(projectRoot, 'node_modules', 'playwright', '.local-browsers');
-    const globalCacheDir = path.join(
+    const home = os.homedir();
+    const globalCacheDir = localEnv['PLAYWRIGHT_BROWSERS_PATH'] ??
       process.env['PLAYWRIGHT_BROWSERS_PATH'] ??
-      path.join(process.env['HOME'] ?? process.env['USERPROFILE'] ?? '', '.cache', 'ms-playwright')
-    );
+      (process.platform === 'win32'
+        ? path.join(process.env['LOCALAPPDATA'] ?? path.join(home, 'AppData', 'Local'), 'ms-playwright')
+        : process.platform === 'darwin'
+          ? path.join(home, 'Library', 'Caches', 'ms-playwright')
+          : path.join(home, '.cache', 'ms-playwright'));
 
     if (fs.existsSync(localBrowsersDir) || fs.existsSync(globalCacheDir)) {
       const dirs = fs.existsSync(localBrowsersDir)
@@ -256,5 +262,28 @@ export class PreFlightService {
   public clearCache(): void {
     this.cachedReport = null;
     this.lastCheckTime = 0;
+  }
+
+  private loadLocalEnv(projectRoot: string): Record<string, string> {
+    const envPath = path.join(projectRoot, '.env');
+    const vars: Record<string, string> = {};
+    if (fs.existsSync(envPath)) {
+      try {
+        const content = fs.readFileSync(envPath, 'utf8');
+        const lines = content.split('\n');
+        for (const line of lines) {
+          const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+          if (match && match[1]) {
+            let value = match[2] || '';
+            value = value.replace(/#.*$/, '').trim();
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+              value = value.substring(1, value.length - 1);
+            }
+            vars[match[1]] = value;
+          }
+        }
+      } catch { }
+    }
+    return vars;
   }
 }

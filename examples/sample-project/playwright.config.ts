@@ -9,8 +9,8 @@ const testDir = defineBddConfig({
 
 export default defineConfig({
   testDir,
-  timeout: 120000,
-  retries: 1,
+  timeout: 60000,
+  retries: 0,
   reporter: [['html'], ['json', { outputFile: 'test-results.json' }]],
   use: {
     baseURL: process.env['BASE_URL'] ?? 'http://localhost:3000',

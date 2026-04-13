@@ -20,3 +20,12 @@ playwright/.cache
 # Other
 *.log
 .DS_Store
+
+# User credential stores (never commit)
+test-data/users.local.json
+
+# User credential stores (never commit)
+test-data/users.staging.json
+
+# User credential stores (never commit)
+test-data/users.prod.json

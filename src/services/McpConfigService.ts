@@ -163,10 +163,16 @@ export interface McpConfig {
 
   /**
    * Optional custom execution command. If provided, overrides the default test runner command.
-   * @example 'npm run test:e2e --'
    * @example 'yarn e2e --'
    */
   executionCommand?: string;
+
+  /**
+   * If true, captures full-page screenshots during `inspect_page_dom`
+   * and surfaces local paths for visual exploration parity in VSCode/Cline.
+   * @default false
+   */
+  enableVisualExploration: boolean;
 }
 
 export const DEFAULT_CONFIG: McpConfig = {
@@ -195,6 +201,7 @@ export const DEFAULT_CONFIG: McpConfig = {
   additionalDataPaths: [],
   a11yStandards: ['wcag2aa'],
   a11yReportPath: 'test-results/a11y-report.json',
+  enableVisualExploration: false,
 };
 
 /**
