@@ -1,0 +1,52 @@
+---
+title: 🩹 Execution & Atomic Healing
+description: Deep dive into the autonomous maintenance and failure analysis systems.
+---
+
+import { Steps, Tabs, TabItem, Badge, Card, CardGrid } from '@astrojs/starlight/components';
+
+Automation is fragile unless it can adapt. This guide explains the technical orchestration behind **Atomic Self-Healing** and **Error DNA Classification**.
+
+:::note[The Source of Truth]
+This document is the definitive technical reference for the Healing subsystem. For high-level user workflows, see the [Workflows Guide](/TestForge/repo/user/workflows/).
+:::
+
+---
+
+## 🧬 Atomic Healing Orchestration
+When a locator fails, TestForge doesn't just guess; it performs a multi-stage verification loop to ensure the fix is accurate and actionable.
+
+![Atomic Self-Healing Deep Dive](../../../../assets/healing_logic_2d.png)
+
+### 1. Error DNA Classification
+Every crash is parsed into a deterministic signature. This allows the AI to determine if a failure is a **UI Churn** (requires healing) or an **App Bug** (requires a bug report).
+- **Locators.Broken**: ID/Class/Text changed.
+- **Assertion.Failed**: Logic mismatch (Don't heal).
+- **Environment.Timeout**: Network/Perf issues.
+
+### 2. Live Role Verification
+TestForge uses a "Dry Run" strategy. It finds candidates in the Accessibility Tree (matching Role, Name, and State) and then **attempts to interact with them** in a hidden browser context. If the interaction fails, the candidate is discarded.
+
+### 3. AST-Aware Source Patching
+Once a fix is verified, the `patch_source` tool uses an Abstract Syntax Tree (AST) parser to locate the exact variable or string in your Page Object. It overwrites the code while meticulously **preserving your comments, line breaks, and logic decorators**.
+
+---
+
+## 👁️ AI-Ready DOM Architecture
+Most AI agents fail because HTML is too noisy. TestForge translates the live DOM into an **AI-Compatible JSON format**.
+
+```json
+{
+   "id": 42,
+   "role": "button",
+   "name": "Submit Payment",
+   "actionable": true,
+   "suggested_locator": "getByRole('button', { name: 'Submit Payment' })"
+}
+```
+
+---
+
+:::note[Pro Comment]
+Atomic Healing is 5x more reliable than traditional 'guess-and-check' healing because it performs a **Live Verification** on the target element before committing the change to your codebase.
+:::

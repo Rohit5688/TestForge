@@ -1,0 +1,99 @@
+---
+title: ✍️ Test Generation & Atomic Staging
+description: Engineering the synthesis of perfect Playwright-BDD code.
+---
+
+import { Steps, Tabs, TabItem, Badge, Card, CardGrid } from '@astrojs/starlight/components';
+
+Test Generation is the process of converting human intent into machine-executable BDD specs. TestForge goes beyond simple 'recording' by applying **Architectural Intelligence** to your codebase.
+
+:::note[What you will learn]
+- The **TestForge Pipeline**: From DOM extraction to validated source code.
+- How to enforce **Page Object Model (POM)** standards automatically.
+- Strategies for generating **Atomic, Non-Flaky Steps**.
+- Managing custom **Step-Definition reusability**.
+:::
+
+TestForge uses a multi-stage **Generation Pipeline** that prevents 'ghost-coding' and ensures every line of code is production-ready.
+
+---
+
+## 🛠️ The 3-Step Production Pipeline
+
+TestForge operates like a compiler for human intent.
+
+<Steps>
+
+1.  **Deep Brain Scan (`analyze_codebase`)**  
+    We don't guess what your code looks like. We run a full AST (Abstract Syntax Tree) indexer.  
+    - **Page Object Map**: We find every method like `login()`, `submitForm()`, or `logout()`.
+    - **Step Inventory**: We find every BDD regex (e.g., `/^I navigate to (.*)$/`).
+    - **Dependency Graph**: We know which Page Objects depend on `BasePage`.
+
+2.  **Contextual Synthesis (`generate_cucumber_pom`)**  
+    The AI synthesizes the test logic by merging your request with the project's **Structural Brain**.
+    - If you ask for 'Login', the AI *only* receives the code for `LoginPage.ts` and relevant steps, saving **90% of token usage**.
+
+3.  **Atomic Safety Gate (`validate_and_write`)**  
+    This is where 'hallucinations' are killed.  
+    - **Type Check**: Runs `tsc --noEmit`. If the AI invented a method that doesn't exist, the build fails and the AI is forced to fix it.
+    - **Gherkin Check**: Ensures the `.feature` file is valid and readable.
+
+</Steps>
+
+---
+
+## 📐 The POM Enforcement Rulebook
+Every AI agent using TestForge is bound by these **"Hard Rules"**. If they try to take a shortcut, the system prompts them to refactor.
+
+| Rule | Bad Pattern (Blocked ❌) | Good Pattern (Enforced ✅) |
+| :--- | :--- | :--- |
+| **Locators** | `page.click('#btn-7')` | `await loginPage.clickSubmitButton()` |
+| **Asserts** | `expect(status).toBe(200)` | `await resultsPage.verifySuccessMessage()` |
+| **Wait For** | `page.waitForTimeout(3000)` | `await resultsPage.waitForLoadingSpinnerToHide()` |
+| **Imports** | Absolute paths like `/Users/rohit/..` | Relative aliases like `@pages/LoginPage` |
+
+---
+
+## 🎓 Teaching the Machine (`train_on_example`)
+TestForge has a **Global Learning Brain**. If the AI keeps making the same mistake (e.g., forgetting a custom corporate header in requests), you can teach it once and it will remember forever.
+
+**Example Training Prompt**:
+> *"Whenever you generate a Page Object for our 'Orders' service, always import `OrderUtils` and call `OrderUtils.sanitize(orderId)` before filling the form."*
+
+**The Tool Action**:
+`train_on_example({ projectRoot: "./", issuePattern: "Orders form validation", solution: "Import OrderUtils and call sanitize()" })`
+
+---
+
+## 📂 Code Output Comparison
+
+<Tabs>
+  <TabItem label="AI Script (Traditional)">
+    ```typescript
+    // Fragile, hard to find, ad-hoc
+    test('login', async ({ page }) => {
+      await page.goto('/login');
+      await page.fill('#id_1', 'user');
+      await page.click('.btn-blue');
+    });
+    ```
+  </TabItem>
+  <TabItem label="TestForge Orchestrated">
+    ```typescript
+    // Robust, reusable, documented
+    @Then('I login with valid credentials')
+    async login({ loginPage }) {
+      await loginPage.navigate();
+      await loginPage.enterCredentials(user);
+      await loginPage.submit();
+    }
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+:::tip[Architect's Advice]
+Developing a complex form? Ask the agent: *"First, generate a **Data Factory** (test-data/data_factory.ts) using TestForge so we can have randomized, schema-valid data for every test run."*
+:::

@@ -267,14 +267,6 @@ export class SmartDomExtractor {
       if (idx > MAX_NODES + 1) break;
     }
 
-    // Also include the raw YAML for completeness (capped to keep tokens manageable)
-    const rawCap = yaml.length > 4000 ? yaml.slice(0, 4000) + '\n... [aria snapshot truncated]' : yaml;
-    lines.push('');
-    lines.push('### Raw ARIA Snapshot (for full reference)');
-    lines.push('```yaml');
-    lines.push(rawCap);
-    lines.push('```');
-
     return lines.join('\n');
   }
 }

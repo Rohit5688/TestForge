@@ -1,10 +1,12 @@
-# 📈 TestForge: Technical Evolution Analysis
+---
+title: "📈 TestForge: Technical Evolution Analysis"
+---
 
 This document traces the architectural journey of the TestForge (Playwright-BDD) MCP, documenting the key phases that moved it from a basic generator to a high-sovereignty autonomous orchestrator.
 
 ---
 
-## 🏗️ 1. The Foundational Era (Playwright-BDD Adoption)
+## 📄 1. The Foundational Era (Playwright-BDD Adoption)
 **Focus**: BDD-First Core & AI Synthesis.
 
 *   **Birth of the BDD-First Approach**: Established the standard `analyze_codebase` -> `generate_gherkin` -> `run_test` lifecycle.
@@ -13,7 +15,7 @@ This document traces the architectural journey of the TestForge (Playwright-BDD)
 
 ---
 
-## 👁️ 2. The Perception Era (A11y-First Locators)
+## 📄 2. The Perception Era (A11y-First Locators)
 **Focus**: Solving the "Flaky Selector" Problem.
 
 *   **Accessibility Tree Integration**: Introduction of `inspect_page_dom`. By using the semantic Accessibility Object Model (AOM), the tool shifted from brittle CSS/XPath to robust, ARIA-based locators.
@@ -21,7 +23,7 @@ This document traces the architectural journey of the TestForge (Playwright-BDD)
 
 ---
 
-## 🛡️ 3. The Governance Era (mcp-config & User Stores)
+## ⚙️ 3. The Governance Era (mcp-config & User Stores)
 **Focus**: Scalability, Standards, and Autonomy.
 
 *   **`mcp-config.json`**: Introduction of centralized governance. Teams can now enforce tag taxonomies, directory structures, and wait strategies.
@@ -29,7 +31,7 @@ This document traces the architectural journey of the TestForge (Playwright-BDD)
 
 ---
 
-## 🚀 4. The Atomic Orchestration Era (v2.4+)
+## 📄 4. The Atomic Orchestration Era (v2.4+)
 **Focus**: Performance, Diagnosis, and Atomic Actions.
 
 *   **Turbo Mode (Sandbox Execution)**: Introduction of `execute_sandbox_code`. By running analysis snippets in a secure V8 sandbox, the tool achieved **~98% token savings**.
@@ -38,7 +40,7 @@ This document traces the architectural journey of the TestForge (Playwright-BDD)
 
 ---
 
-## 🏛️ 5. Summary of Technical Shifts
+## 📄 5. Summary of Technical Shifts
 
 | Aspect | Classic Era | Governance Era | Atomic Era (v2.4+) |
 | :--- | :--- | :--- | :--- |

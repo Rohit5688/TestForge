@@ -1,53 +1,72 @@
 ---
-title: AgentBrain API
-description: Technical specification for the high-level reasoning and tool orchestration layer.
+title: "Class: ContextManager"
+description: The session state manager that maintains DOM history, navigation maps, and context windows between tool calls.
 ---
 
-import { Steps } from '@astrojs/starlight/components';
 import { Card, CardGrid } from '@astrojs/starlight/components';
 
-The `AgentBrain` is the cognitive center of TestForge. It handles the translation of high-level user intents into atomic tool calls, manages state history, and performs the "Reflection" step before any destructive action (like file writing).
+`ContextManager` is a TestForge internal service responsible for maintaining the rolling session context. It ensures every tool call has access to the most relevant, token-efficient view of the project — without requiring re-analysis on every turn.
 
-> [!NOTE]
-> AgentBrain operates on the **Macro-to-Atomic Mapping** principle, preventing the AI from getting lost in low-level DOM noise.
-
-## 🧭 Plan Generation
-
-### `generatePlan(intent)`
-Converts a natural language request into a sequence of executable blocks.
-- **Context Awareness**: Reads the current `mcp-config.json` and legacy feature files to ensure standard patterns are reused.
-- **Safety Reflection**: Checks if the plan involves deleting files or modifying `.env` secrets.
-
-### `workflow_guide`
-A specialized submodule that provides official blueprints for common automation chains.
-- **Example Flow**: `setup` -> `inspect` -> `generate_pom` -> `write` -> `verify`.
+:::note[Internal Service]
+`ContextManager` is not a directly-callable MCP tool. It operates automatically as part of the `generate_gherkin_pom_test_suite` and `inspect_page_dom` pipelines. This page documents its behavior so you can understand and predict context initialization costs.
+:::
 
 ---
 
-## 🩹 Self-Healing Logic
+## 🏗️ Core Responsibilities
 
-The `AgentBrain` doesn't just find a new selector; it attempts to understand **why** the old one failed (e.g., "The div wrapper was removed," or "The ID became dynamic").
-
-### `calculateHealedSelector()`
-1. **Accessibility Scan**: Probes the live tree for elements with the same Role and Name.
-2. **Fuzzy Text Matching**: If ARIA roles fail, it looks for elements with similar visible text contents.
-3. **Hierarchy Comparison**: Compares the sibling-structure of the old selector against the current DOM.
+<CardGrid>
+  <Card title="DOM History" icon="document">
+    Tracks the last DOM snapshot per page URL. Limits context to **1 snapshot per page** to prevent token bloat. Subsequent calls to the same URL reuse the cached snapshot.
+  </Card>
+  <Card title="Navigation Graph" icon="random">
+    Maintains the live navigation graph built by `discover_app_flow`. Exposes it to the generation pipeline so Page Objects reference real routes.
+  </Card>
+  <Card title="Structural Map" icon="puzzle">
+    Holds the AST-analyzed map of existing Page Objects and step definitions — the "Warm Brain" that prevents re-scanning on every generation call.
+  </Card>
+  <Card title="Token Counters" icon="approve-check">
+    Tracks per-tool token estimates for the session. Surfaced via `get_token_budget`.
+  </Card>
+</CardGrid>
 
 ---
 
-## 🪵 State & Telemetry
+## 📐 Context Initialization Cost
 
-TestForge tracks the "Mental State" of the agent throughout the session.
+When a new session begins (or after a full context reset), `ContextManager` performs a **warm-up scan**. This is a one-time cost per session:
 
-- **`tokenBudget`**: Prevents the session from exceeding a specified cost limit.
-- **`toolChainHistory`**: A sequence of all tools called, used for debugging "Hallucinated" flows.
-- **`knowledgeItems`**: Fetches "Gotchas" and "Patterns" from the `.AppForge/learning.json` store to avoid repeating past mistakes.
+| Warm-Up Step | Trigger | Token Cost |
+| :--- | :--- | :--- |
+| Structural map build | First call to any generation tool | Low (~200 tokens via Turbo Mode) |
+| DOM capture | First `inspect_page_dom` call per URL | Medium (~400–800 tokens) |
+| Navigation graph load | First `discover_app_flow` result | Low (reads cached JSON) |
+
+After warm-up, subsequent calls in the same session skip these steps entirely.
+
+---
+
+## 🔁 Context Window Management
+
+`ContextManager` enforces the **1-scan-per-page rule**: for any given URL, only the most recent DOM snapshot is kept in the rolling context. Older snapshots are evicted automatically.
+
+This prevents the common failure mode where repeated inspections of the same page accumulate 5–10 stale snapshots and exhaust the token budget.
+
+**Manually reset context** when switching tasks:
+> *"Start a new TestForge context — I'm moving to the checkout flow now"*
 
 ---
 
 ## 🛡️ Security Boundaries
 
-`AgentBrain` enforces strict boundaries to prevent the AI from escaping the project root.
+- All file paths are resolved against `projectRoot`. Traversal via `..` is rejected.
+- `.env` values and `users.*.json` content are masked in all telemetry logs.
+- DOM snapshots stored in memory are never written to disk.
 
-- **Path Sanitization**: All file paths are resolved against `projectRoot`. Attempts to use `..` or absolute system paths are rejected.
-- **Credential Masking**: Secrets retrieved via `manage_config` are masked in the telemetry logs.
+---
+
+## Related Tools
+
+- [`get_system_state`](/TestForge/api/tools/) — Returns the current ContextManager snapshot, token cost, and turn counter.
+- [`get_token_budget`](/TestForge/api/tools/) — Per-tool token usage breakdown.
+- [`execute_sandbox_code`](/TestForge/api/tools/) — The recommended way to query context without triggering a full re-scan.

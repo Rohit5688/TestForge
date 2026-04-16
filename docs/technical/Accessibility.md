@@ -1,10 +1,12 @@
-# ♿ Automated Accessibility Testing
+---
+title: "📄 Automated Accessibility Testing"
+---
 
 TestForge integrates native accessibility (a11y) validation into your BDD workflow using `@axe-core/playwright`. This allows you to verify WCAG compliance as part of every functional regression test.
 
 ---
 
-## 🚀 1. Configuration & Standards
+## ⚙️ 1. Configuration & Standards
 
 Define your compliance targets and report paths in `mcp-config.json`:
 
@@ -15,7 +17,7 @@ Define your compliance targets and report paths in `mcp-config.json`:
 }
 ```
 
-### Supported Standards
+### 📄 Supported Standards
 | Standard | Tag | Target |
 | :--- | :--- | :--- |
 | **WCAG 2.1 AA** | `wcag21aa` | Commercial & public legal standard. |
@@ -25,9 +27,9 @@ Define your compliance targets and report paths in `mcp-config.json`:
 
 ---
 
-## ✍️ 2. Writing A11y Tests
+## 📄 2. Writing A11y Tests
 
-### In Gherkin
+### 📄 In Gherkin
 The AI is trained to recognize a11y intent. You can include it in any scenario:
 ```gherkin
 Scenario: Verify checkout accessibility
@@ -35,7 +37,7 @@ Scenario: Verify checkout accessibility
   Then I check the accessibility of the page
 ```
 
-### In Page Objects
+### 📄 In Page Objects
 The `BasePage` includes a native `checkAccessibility()` helper. You can call it manually in any step definition:
 ```typescript
 Then('I check the accessibility of the page', async ({ checkoutPage }) => {
@@ -45,7 +47,7 @@ Then('I check the accessibility of the page', async ({ checkoutPage }) => {
 
 ---
 
-## 🛠️ 3. Failure & Diagnosis
+## 🆘 3. Failure & Diagnosis
 
 When an accessibility violation is detected:
 1. **Immediate Failure**: The Playwright test fails to prevent non-compliant code from merging.
@@ -54,7 +56,7 @@ When an accessibility violation is detected:
 
 ---
 
-## 👁️ 4. Why A11y Matters in TestForge
+## 📄 4. Why A11y Matters in TestForge
 TestForge uses the **Accessibility Tree** (`inspect_page_dom`) as its primary "vision" system. 
 - **Symbiotic Stability**: Writing accessible code (with labels and roles) makes TestForge's autonomous healing system *more* powerful. 
 - **Semantic Locators**: By finding elements through their a11y roles (e.g., `getByRole('button', { name: 'Purchase' })`), we ensure the application is usable by everyone while making our automation suite 10x more stable.

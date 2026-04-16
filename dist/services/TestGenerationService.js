@@ -39,15 +39,39 @@ export class TestGenerationService {
                 `Usage in Page Object methods: const { username, password } = getUser('<role>');\n` +
                 `NEVER use process.env.USERNAME or process.env.PASSWORD — always use getUser() instead.`
             : '';
+        // --- Token efficiency: relevance filter to reduce context bloat on mature projects ---
+        // Extract keywords from the test description to filter only related steps and page objects.
+        // Falls back to including everything if description is too short to filter meaningfully.
+        const descWords = testDescription
+            .toLowerCase()
+            .replace(/[^a-z0-9 ]/g, ' ')
+            .split(/\s+/)
+            .filter((w) => w.length > 3); // skip short words like "the", "and", "with"
+        const isDescriptive = descWords.length >= 3;
+        function isRelevant(text) {
+            if (!isDescriptive)
+                return true; // can't filter without enough context — include all
+            const lower = text.toLowerCase();
+            return descWords.some((w) => lower.includes(w));
+        }
+        const MAX_STEPS = 60;
+        const MAX_PAGE_OBJECTS = 10;
+        // ---------------------------------------------------------------------------------
         const reusedContext = [
             analysisResult.bddSetup.present ? "Existing playwright-bdd configuration" : "No playwright-bdd found (needs provisioning)",
             "--- Naming Conventions (MUST FOLLOW) ---",
             `Features: ${analysisResult.namingConventions.features}`,
             `Page Objects: ${analysisResult.namingConventions.pages}`,
             "--- Existing Step Patterns to Reuse ---",
-            ...(analysisResult.existingStepDefinitions.flatMap(s => s.steps.map(step => `- ${step}`))),
+            ...(analysisResult.existingStepDefinitions
+                .flatMap(s => s.steps.map(step => `- ${step}`))
+                .filter(step => isRelevant(step))
+                .slice(0, MAX_STEPS)),
             "--- Page Objects ---",
-            ...(analysisResult.existingPageObjects.map(p => `${p.path} -> Methods: ${p.publicMethods.join(', ')}`)),
+            ...(analysisResult.existingPageObjects
+                .filter(p => isRelevant(p.path) || isRelevant(p.publicMethods.join(' ')))
+                .slice(0, MAX_PAGE_OBJECTS)
+                .map(p => `${p.path} -> Methods: ${p.publicMethods.join(', ')}`)),
             ...(analysisResult.customWrapper ? [
                 `Custom Wrapper (${analysisResult.customWrapper.package}): ${analysisResult.customWrapper.isInstalled ? analysisResult.customWrapper.detectedMethods.join(', ') : 'Not Installed/Resolved'}`,
             ] : []),

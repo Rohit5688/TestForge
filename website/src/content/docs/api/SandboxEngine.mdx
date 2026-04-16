@@ -1,67 +1,144 @@
 ---
-title: SandboxEngine API
-description: Technical specification for the secure, token-optimized code analysis environment.
+title: "Class: SandboxEngine"
+description: The isolated V8 execution environment that processes data locally — the core of TestForge's token efficiency.
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Card, CardGrid } from '@astrojs/starlight/components';
 
-The `SandboxEngine` (Turbo Mode) is a high-performance execution environment for analyzing codebases without reading hundreds of files. It executes optimized TypeScript scripts against an in-memory representation of your project.
+`SandboxEngine` is the local V8-based execution environment that powers the `execute_sandbox_code` MCP tool. It processes DOM trees, runs AST queries, and performs pattern searches entirely on your machine — transmitting only the filtered results to the LLM.
 
-> [!IMPORTANT]
-> **Token Savings**: Sandbox analysis consumes **98% fewer tokens** compared to reading raw files, as it only returns the specific data requested by the script.
+:::tip[Why This Matters]
+Without the SandboxEngine, every analysis task would require sending raw file contents to the LLM. A typical project scan costs **~15,000 tokens** naively. With the SandboxEngine, the same analysis costs **~300 tokens** — a 98% reduction.
+:::
 
-## 🚀 The Execution Core
+---
 
-### `execute_sandbox_code`
-Pass a TypeScript script to the engine for execution.
-- **Access**: Provides the `forge` global object.
-- **Safety**: Runs in an isolated V8 process with no access to system `process`, `child_process`, or `network`.
+## 🏗️ Architecture
 
-```ts
-// Example Sandbox Script
-const files = forge.api.searchFiles('**/*.feature');
-const stats = files.map(f => forge.api.readFile(f).length);
-return { count: files.length, totalChars: stats.reduce((a, b) => a + b, 0) };
+The SandboxEngine creates a `vm2`-style isolated V8 context for every `execute_sandbox_code` call:
+
+```
+AI Prompt → MCP Handler → SandboxEngine (local V8 isolate)
+                                    ↓
+                          forge.api.* calls (file reads, AST, grep)
+                                    ↓
+                          Result filtered/summarized in sandbox
+                                    ↓
+                          Only the return value → LLM context
+```
+
+**What stays local**: Raw file contents, full AST trees, XML hierarchies, node_modules data.  
+**What goes to LLM**: Only the `return` value of your script.
+
+---
+
+## 🔌 The `forge.api` Interface
+
+All data access within the sandbox goes through the `forge.api` namespace:
+
+### `forge.api.readFile(relativePath)`
+Reads a file relative to `projectRoot`. Returns the full content as a string.
+```javascript
+const tsconfig = await forge.api.readFile('tsconfig.json');
+const config = JSON.parse(tsconfig);
+return config.compilerOptions.target;
+```
+
+### `forge.api.listFiles(directory, globPattern)`
+Lists files matching a glob pattern.
+```javascript
+const featureFiles = await forge.api.listFiles('./features', '**/*.feature');
+return { count: featureFiles.length, files: featureFiles };
+```
+
+### `forge.api.searchFiles(regexPattern, directory)`
+Regex search across all files in a directory. Returns `{ file, line, content }[]`.
+```javascript
+const results = await forge.api.searchFiles('@smoke', './features');
+return results.map(r => r.file).filter((v, i, a) => a.indexOf(v) === i);
+```
+
+### `forge.api.analyzeCodebase(projectRoot, options)`
+Runs full AST analysis and returns structured page objects / step definitions.
+```javascript
+const { existingPageObjects } = await forge.api.analyzeCodebase('/my-project', { type: 'pageObjects' });
+return existingPageObjects.map(po => po.className);
+```
+
+### `forge.api.getConfig()`
+Reads and parses `mcp-config.json`.
+```javascript
+const config = await forge.api.getConfig();
+return { baseUrl: config.baseUrl, environment: config.currentEnvironment };
 ```
 
 ---
 
-## 🛡️ Performance & Security Quotas
+## ⚠️ Sandbox Constraints
 
-To prevent infinite loops and resource exhaustion, the SandboxEngine enforces strict quotas.
-
-| Quota | Limit | Description |
+| Constraint | Value | Reason |
 | :--- | :--- | :--- |
-| **Timeout** | 3,000ms | Maximum execution time per script. |
-| **Memory** | 128MB | Maximum heap allocation for the sandbox process. |
-| **Output Size** | 50KB | Maximum JSON payload size returned to the AI. |
-| **File I/O** | 50 Calls | Maximum number of `forge.api.readFile` calls per execution. |
+| **Execution timeout** | 10,000 ms (default) | Prevents runaway scripts from blocking the MCP server |
+| **Network access** | Disabled | Local-only processing; no external HTTP calls |
+| **File writes** | Disabled | Use `validate_and_write` for all file mutations |
+| **`require()`** | Restricted | Only `forge.api.*` namespace is available |
+| **Max return size** | ~50 KB | Keep return values focused and filtered |
+
+If you hit the timeout, filter your data inside the sandbox instead of returning everything:
+```javascript
+// ❌ Times out on large projects
+const pages = await forge.api.listFiles('.', '**/*.ts');
+return pages;  // Could be 1000+ files
+
+// ✅ Filter first, return only what's needed
+const pages = await forge.api.listFiles('.', '**/pages/**/*.ts');
+return pages.slice(0, 20);  // Return only first 20
+```
 
 ---
 
-## 🔍 AST Scrutiny
+## 🧪 Common Patterns
 
-Before execution, every script passes through an Abstract Syntax Tree (AST) validator.
-
-- **Blocked Keywords**: `require`, `eval`, `Function`, `Proxy`, `Reflect`.
-- **Import Scoping**: Scripts can only import from a whitelist of project-safe utilities.
-- **Node Depth**: Scripts with nesting depth > 20 are rejected to prevent complexity exploits.
+<Tabs>
+  <TabItem label="Find all @tags">
+    ```javascript
+    const files = await forge.api.listFiles('./features', '**/*.feature');
+    const tags = new Set();
+    for (const f of files) {
+      const content = await forge.api.readFile(f);
+      const matches = content.match(/@\w+/g) || [];
+      matches.forEach(t => tags.add(t));
+    }
+    return [...tags].sort();
+    ```
+  </TabItem>
+  <TabItem label="Find duplicate steps">
+    ```javascript
+    const steps = await forge.api.listFiles('./step-definitions', '**/*.ts');
+    const stepMap = {};
+    for (const f of steps) {
+      const content = await forge.api.readFile(f);
+      const matches = content.match(/Given|When|Then\(['"`](.*?)['"`]/g) || [];
+      matches.forEach(m => {
+        stepMap[m] = (stepMap[m] || 0) + 1;
+      });
+    }
+    return Object.entries(stepMap).filter(([_, v]) => v > 1);
+    ```
+  </TabItem>
+  <TabItem label="Check config completeness">
+    ```javascript
+    const config = await forge.api.getConfig();
+    const required = ['baseUrl', 'currentEnvironment', 'browsers'];
+    const missing = required.filter(k => !config[k]);
+    return { valid: missing.length === 0, missing };
+    ```
+  </TabItem>
+</Tabs>
 
 ---
 
-## 🛠️ Sandbox API Reference
+## Related Pages
 
-The `forge` object exposed to your scripts provides the following capabilities:
-
-### `forge.api.listFiles(pattern)`
-Returns a deduplicated list of absolute paths matching the glob pattern.
-
-### `forge.api.searchFiles(regex)`
-Scans file contents for a specific regex pattern across the entire project root.
-
-### `forge.api.parseAST(filePath)`
-Returns a simplified JSON representation of a TypeScript file's classes and methods. Ideal for mapping Page Objects.
-
-### `forge.api.getConfig()`
-Returns the current `mcp-config.json` state.
+- [`execute_sandbox_code` tool reference](/TestForge/api/tools/) — how to invoke the sandbox
+- [Token Optimizer guide](/TestForge/repo/technical/tokenoptimizer/) — full token reduction strategies

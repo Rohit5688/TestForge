@@ -1,0 +1,68 @@
+---
+title: Automation Workflows
+description: Common operational patterns for the AI-driven developer journey.
+---
+
+import { Steps, Badge, Card, CardGrid } from '@astrojs/starlight/components';
+
+Effective automation requires a structured approach. This guide covers the **Developer Lifecycle**, from initial prompt to a green CI/CD pipeline.
+
+:::note[What you will learn]
+- The **Modern Dev Loop**: Continuous Orchestration.
+- **Greenfield Workflow**: Building tests for new features.
+- **Maintenance Lifecycle**: Gracefully handling UI changes.
+- **Discovery Strategy**: Mapping unknown application flows.
+:::
+
+---
+
+## 🔄 The Developer Experience Loop
+Automation in TestForge isn't a one-off script; it's a circular lifecycle of reasoning and refinement.
+
+![TestForge Developer Lifecycle](../../../../assets/user_lifecycle_2d.png)
+
+---
+
+## 🏗️ 1. Greenfield Feature Workflow
+Use this when you have a brand new feature or page to automate.
+
+<Steps>
+1.  **Requirement Extraction**  
+    Input your user story. The AI uses `inspect_page_dom` to find semantic markers.
+2.  **BDD Synthesis**  
+    The agent generates a human-readable Gherkin feature.
+3.  **POM Atomic Write**  
+    Use `validate_and_write` to commit the Page Object to your repository.
+</Steps>
+
+---
+
+## 🩹 2. Maintenance & Healing Workflow
+UI churn is inevitable. TestForge treats failure as a signal to update your assets.
+
+<Steps>
+1.  **Failure Detection**  
+    A locator fails. The AI classifies the **Error DNA**.
+2.  **Autonomous Recovery**  
+    The agent invokes the healer to find and verify a replacement.
+    > See the [Technical Healing Deep-Dive](/TestForge/repo/technical/executionandhealing/) for internal details.
+3.  **Source Code Patching**  
+    The agent applies the verified fix directly to your Page Object file.
+</Steps>
+
+---
+
+## ⛓️ 3. Legacy Migration Path
+Moving from Selenium, Detox, or XCUITest? TestForge parses your legacy code and synthesizes modern Playwright-BDD equivalents.
+
+<Steps>
+1. **Source Supply**: Input legacy Java/Swift code.
+2. **Logic Mapping**: AI maps old selectors to current DOM roles.
+3. **Synthesis**: Generates clean, type-safe Page Objects.
+</Steps>
+
+---
+
+:::tip[AI Directives]
+Always ask the AI to "Scan for new navigation paths" before writing tests for a complex dashboard.
+:::

@@ -29,7 +29,7 @@ export class LearningService {
     /**
      * Learns a new pattern and persists it to the project's autonomous knowledge base.
      */
-    learn(projectRoot, pattern, solution, tags = []) {
+    learn(projectRoot, pattern, solution, tags = [], extras) {
         const knowledge = this.getKnowledge(projectRoot);
         // Prevent exact duplicates
         const existing = knowledge.rules.find(r => r.pattern === pattern && r.solution === solution);
@@ -40,34 +40,77 @@ export class LearningService {
             pattern,
             solution,
             tags,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
+            // Spread extras only if provided — keeps JSON clean for rules without them
+            ...(extras?.rationale && { rationale: extras.rationale }),
+            ...(extras?.antiPatterns && { antiPatterns: extras.antiPatterns }),
+            ...(extras?.linkedFile && { linkedFile: extras.linkedFile }),
+            ...(extras?.scope && { scope: extras.scope }),
         };
         knowledge.rules.push(newRule);
         fs.writeFileSync(this.getStoragePath(projectRoot), JSON.stringify(knowledge, null, 2), 'utf8');
         return newRule;
     }
     /**
-     * Generates a rigid system instructions block containing the project's learned rules,
-     * meant to be injected into the MCP's generation prompts (Migration, BDD scaffolding, etc).
+     * Generates a system instructions block containing the project's learned rules,
+     * injected into generation prompts. Supports tag-based filtering and a recency cap
+     * to prevent prompt bloat on mature projects with many rules.
      */
-    getKnowledgePromptInjection(projectRoot, dynamicDirectives = []) {
+    getKnowledgePromptInjection(projectRoot, context, dynamicDirectives = []) {
         const knowledge = this.getKnowledge(projectRoot);
         if (knowledge.rules.length === 0 && dynamicDirectives.length === 0)
             return '';
+        const MAX = context?.maxRules ?? 30;
+        // Build the filter tag set from all context signals
+        const filterTags = new Set([
+            ...(context?.tags ?? []),
+            ...(context?.screenName ? [context.screenName.toLowerCase()] : []),
+            ...(context?.toolName ? [context.toolName.toLowerCase()] : []),
+        ]);
+        let selected;
+        if (filterTags.size === 0) {
+            // No context provided — take most recent N rules (recency bias)
+            selected = [...knowledge.rules]
+                .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+                .slice(0, MAX);
+        }
+        else {
+            // Split into tag-matching and non-matching
+            const matching = knowledge.rules.filter(r => r.tags.some(t => filterTags.has(t.toLowerCase())));
+            const nonMatching = knowledge.rules.filter(r => !r.tags.some(t => filterTags.has(t.toLowerCase())));
+            // Always include matching rules; fill remaining slots with recent non-matching
+            const matchSlots = Math.min(matching.length, MAX);
+            const remainingSlots = MAX - matchSlots;
+            const topNonMatching = [...nonMatching]
+                .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
+                .slice(0, remainingSlots);
+            selected = [...matching.slice(0, matchSlots), ...topNonMatching];
+        }
+        if (selected.length === 0 && dynamicDirectives.length === 0)
+            return '';
+        const skipped = knowledge.rules.length - selected.length;
         let prompt = `\n### 🧠 CUSTOM TEAM KNOWLEDGE & LEARNED FIXES\n`;
-        prompt += `IMPORTANT: You MUST adhere to the following learned rules. These are prior human-in-the-loop corrections or team structural standards that override ordinary behavior.\n\n`;
-        knowledge.rules.forEach((rule, idx) => {
+        prompt += `IMPORTANT: You MUST adhere to the following learned rules. These are prior human-in-the-loop corrections or team structural standards that override ordinary behavior.\n`;
+        if (skipped > 0) {
+            prompt += `(Showing ${selected.length} most relevant of ${knowledge.rules.length} total rules)\n`;
+        }
+        prompt += `\n`;
+        selected.forEach((rule, idx) => {
             prompt += `**Rule ${idx + 1}**: When you encounter: "${rule.pattern}"\n`;
             prompt += `-> **Action/Solution**: ${rule.solution}\n`;
+            if (rule.rationale)
+                prompt += `-> **Why**: ${rule.rationale}\n`;
+            if (rule.antiPatterns?.length)
+                prompt += `-> **Do NOT**: ${rule.antiPatterns.join(' | ')}\n`;
+            if (rule.linkedFile)
+                prompt += `-> **Applies to**: \`${rule.linkedFile}\`\n`;
             if (rule.tags.length > 0)
                 prompt += `(Tags: ${rule.tags.join(', ')})\n`;
             prompt += `\n`;
         });
         if (dynamicDirectives.length > 0) {
             prompt += `**Inline Codebase Directives (@mcp-learn)**:\n`;
-            dynamicDirectives.forEach(d => {
-                prompt += `- ${d}\n`;
-            });
+            dynamicDirectives.forEach(d => { prompt += `- ${d}\n`; });
             prompt += `\n`;
         }
         return prompt;
@@ -95,9 +138,18 @@ export class LearningService {
         md += `**Version**: ${knowledge.version}\n`;
         md += `**Total Rules**: ${knowledge.rules.length}\n\n`;
         md += `| # | Pattern | Solution | Tags | Learned |\n`;
-        md += `|---|---------|----------|------|--------|\n`;
+        md += `|---|---------|----------|------|---------|\n`;
         knowledge.rules.forEach((rule, idx) => {
             md += `| ${idx + 1} | ${rule.pattern} | ${rule.solution} | ${rule.tags.join(', ')} | ${rule.timestamp.split('T')[0]} |\n`;
+            if (rule.rationale) {
+                md += `| | _Why:_ | ${rule.rationale} | | |\n`;
+            }
+            if (rule.antiPatterns?.length) {
+                md += `| | _Do NOT:_ | ${rule.antiPatterns.join(', ')} | | |\n`;
+            }
+            if (rule.linkedFile) {
+                md += `| | _File:_ | \`${rule.linkedFile}\` | | |\n`;
+            }
         });
         return md;
     }

@@ -1,10 +1,12 @@
-# 🐳 Dockerized TestForge Deployment
+---
+title: "🐳 Dockerized TestForge Deployment"
+---
 
 The TestForge MCP Server is fully dockerized. Using the official Playwright base image ensures that all browser binaries (Chromium, Firefox, WebKit) and OS-level dependencies are perfectly aligned and ready for execution.
 
 ---
 
-## 🏗️ 1. Building the Image
+## 📄 1. Building the Image
 
 Clone the TestForge repository and build the image locally:
 
@@ -17,11 +19,11 @@ docker build -t testforge-mcp .
 
 ---
 
-## 🏠 2. Local Desktop Execution (Stdio)
+## 🩹 2. Local Desktop Execution (Stdio)
 
 To analyze and generate code for a project on your local machine using the Dockerized server, you must mount your project as a volume.
 
-### MCP Client Configuration
+### ⚙️ MCP Client Configuration
 Add this to your `claude_desktop_config.json` or equivalent:
 
 ```json
@@ -47,16 +49,16 @@ Add this to your `claude_desktop_config.json` or equivalent:
 
 ---
 
-## 🌐 3. Cloud / Remote Execution (SSE)
+## 🩹 3. Cloud / Remote Execution (SSE)
 
 For team-wide or CI/CD deployments, run the container in **Server-Sent Events (SSE)** mode over HTTP.
 
-### Running the SSE Server
+### 📄 Running the SSE Server
 ```bash
 docker run -p 3000:3000 -d testforge-mcp --port 3000 --host 0.0.0.0
 ```
 
-### Remote Client Configuration
+### ⚙️ Remote Client Configuration
 ```json
 {
   "mcpServers": {
@@ -70,18 +72,18 @@ docker run -p 3000:3000 -d testforge-mcp --port 3000 --host 0.0.0.0
 
 ---
 
-## 🌩️ 4. Enterprise AWS Deployment (Fargate)
+## 📄 4. Enterprise AWS Deployment (Fargate)
 
 Deploying to AWS Fargate allows your entire organization to leverage autonomous Playwright testing at scale.
 
-### Infrastructure Requirements
+### 📄 Infrastructure Requirements
 - **Compute**: Minimum **2vCPU** and **4GB RAM** (Playwright browsers are memory intensive).
 - **Persistent Storage**: Mount an **Amazon EFS** volume to `/project` to allow the AI to read/write test files across sessions.
 - **Network**: Place within a private VPC and secure behind an Application Load Balancer (ALB) with TLS.
 
 ---
 
-## 📂 5. Dockerized Best Practices
+## 🐳 5. Dockerized Best Practices
 
 1.  **Artifact Retention**: Mount the `test-results/` folder to your host or a persistent volume to view Playwright Traces and Videos after a run.
 2.  **Statelessness**: Treat containers as ephemeral. Destroy the container after major task completion to ensure no cached DOM data or credentials persist.

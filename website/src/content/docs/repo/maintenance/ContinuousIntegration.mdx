@@ -1,0 +1,318 @@
+---
+title: 🔄 CI/CD Integration Guide
+description: Connect TestForge to GitHub Actions, GitLab CI, or Jenkins — with real YAML, artifact uploads, and async test polling.
+---
+
+import { Tabs, TabItem, Steps, Card, CardGrid } from '@astrojs/starlight/components';
+
+TestForge integrates with any CI/CD platform. This guide walks through real, production-ready pipeline configurations covering: Playwright browser installation, test execution, artifact upload, and async job polling.
+
+---
+
+## 🏗️ Architecture in CI
+
+In a CI environment, TestForge runs headless (no GUI). The pipeline:
+
+```
+Checkout → Install Node + Playwright → Install Browsers → Run Tests → Upload Reports
+```
+
+There is no Appium, no mobile dependency — TestForge uses Playwright's built-in browser control.
+
+---
+
+## GitHub Actions
+
+### Generate a Workflow File
+
+Ask TestForge to generate it for you:
+
+```
+"Generate a GitHub Actions CI pipeline for my TestForge project running @smoke tests on push"
+```
+
+This calls `generate_ci_pipeline` and writes `.github/workflows/testforge.yml` to your project.
+
+### Minimal `testforge.yml`
+
+```yaml
+name: TestForge E2E Tests
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  e2e:
+    name: Playwright BDD Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run @smoke tests
+        run: npx playwright test --grep @smoke
+        env:
+          APP_URL: ${{ secrets.STAGING_URL }}
+          STAGING_API_TOKEN: ${{ secrets.STAGING_API_TOKEN }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_number }}
+          path: |
+            mcp-logs/
+            playwright-report/
+          retention-days: 14
+
+      - name: Upload traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces-${{ github.run_number }}
+          path: test-results/**/*.zip
+```
+
+### Production `testforge.yml` (Multi-Browser, Nightly)
+
+```yaml
+name: TestForge Full Regression
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 2 * * *'  # Nightly at 02:00 UTC
+
+jobs:
+  regression:
+    name: ${{ matrix.browser }} Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Run tests (${{ matrix.browser }})
+        run: npx playwright test --project=${{ matrix.browser }}
+        env:
+          APP_URL: ${{ secrets.STAGING_URL }}
+          CI: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: report-${{ matrix.browser }}-${{ github.run_number }}
+          path: playwright-report/
+          retention-days: 30
+
+  notify-failure:
+    needs: regression
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Slack on failure
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+```
+
+---
+
+## GitLab CI
+
+### Minimal `.gitlab-ci.yml`
+
+```yaml
+image: mcr.microsoft.com/playwright:v1.44.0-jammy
+
+stages:
+  - test
+  - report
+
+variables:
+  npm_config_cache: "$CI_PROJECT_DIR/.npm"
+
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - .npm/
+    - node_modules/
+
+e2e:smoke:
+  stage: test
+  script:
+    - npm ci
+    - npx playwright test --grep @smoke
+  artifacts:
+    when: always
+    paths:
+      - mcp-logs/
+      - playwright-report/
+    expire_in: 14 days
+  environment:
+    name: staging
+  only:
+    - merge_requests
+    - main
+```
+
+---
+
+## Jenkins
+
+### `Jenkinsfile` (Declarative)
+
+```groovy
+pipeline {
+    agent {
+        docker {
+            image 'mcr.microsoft.com/playwright:v1.44.0-jammy'
+            args '-u root'
+        }
+    }
+    environment {
+        APP_URL = credentials('staging-app-url')
+    }
+    stages {
+        stage('Install') {
+            steps {
+                sh 'npm ci'
+            }
+        }
+        stage('Test') {
+            steps {
+                sh 'npx playwright test --grep @smoke'
+            }
+        }
+    }
+    post {
+        always {
+            archiveArtifacts artifacts: 'mcp-logs/**,playwright-report/**',
+                             allowEmptyArchive: true
+            publishHTML(target: [
+                reportDir: 'playwright-report',
+                reportFiles: 'index.html',
+                reportName: 'TestForge Report'
+            ])
+        }
+    }
+}
+```
+
+---
+
+## 🔐 Environment Variables in CI
+
+Never hardcode credentials in config files. Use CI secrets mapped to the `envKeys` from `mcp-config.json`:
+
+| `mcp-config.json` envKey | CI Secret Name | Description |
+| :--- | :--- | :--- |
+| `baseUrl` → `APP_URL` | `STAGING_URL` | App under test URL |
+| `apiKey` → `STAGING_API_TOKEN` | `STAGING_API_TOKEN` | API auth token |
+
+In GitHub Actions these are accessed as `${{ secrets.SECRET_NAME }}` and injected as `env:` on the test step.
+
+---
+
+## 📊 Reports & Artifacts
+
+### Forge Session Viewer
+
+The `mcp-logs/viewer.html` file is a self-contained HTML report. Upload it as an artifact and it renders in any browser without a server:
+
+```yaml
+- uses: actions/upload-artifact@v4
+  with:
+    name: forge-session-viewer
+    path: mcp-logs/viewer.html
+```
+
+### Playwright HTML Report
+
+The `playwright-report/` directory contains Playwright's built-in HTML report. Access it after the run:
+
+```bash
+# View locally after downloading the artifact
+npx playwright show-report playwright-report/
+```
+
+### Cucumber JSON Report
+
+Located at `mcp-logs/cucumber-report.json`. Can be fed into tools like [Cucumber Reports](https://reports.cucumber.io/) or Allure.
+
+---
+
+## 🔁 Using `check_test_status` in CI
+
+When running long suites, TestForge's async job system prevents timeouts. Use this pattern in scripts:
+
+```bash
+# Start tests (async)
+JOB_ID=$(npx testforge run --async --tags @regression | jq -r '.jobId')
+
+# Poll until done (max 30 min)
+for i in $(seq 1 60); do
+  STATUS=$(npx testforge status $JOB_ID | jq -r '.status')
+  echo "Attempt $i: $STATUS"
+  [ "$STATUS" = "completed" ] && break
+  [ "$STATUS" = "failed" ] && exit 1
+  sleep 30
+done
+```
+
+---
+
+## ✅ CI Readiness Checklist
+
+Before pushing to CI, verify:
+
+- [ ] `baseUrl` is in CI secrets, not hardcoded in config
+- [ ] `npm ci` used instead of `npm install` (reproducible lockfile install)
+- [ ] `npx playwright install --with-deps` included — CI machines have no browsers pre-installed
+- [ ] Artifacts uploaded with `if: always()` — you want reports even on failure
+- [ ] `timeout-minutes` set — prevents runaway jobs from consuming CI quota
+- [ ] `.env` and `users.prod.json` are in `.gitignore`
+
+---
+
+## Related Pages
+
+- [Installation & MCP Setup](/TestForge/repo/user/installation/) — local setup before CI
+- [MCP Config Reference](/TestForge/repo/technical/mcp_config_reference/) — `envKeys` mapping
+- [Troubleshooting](/TestForge/repo/user/troubleshooting/) — debugging CI failures

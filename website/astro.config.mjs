@@ -24,8 +24,10 @@ export default defineConfig({
 				{
 					label: '🚀 Getting Started',
 					items: [
+						{ label: '🛠️ Installation & MCP Setup', link: 'repo/user/installation' },
 						{ label: '⏱️ 5-Minute Quickstart', link: 'repo/user/quickstart' },
-						{ label: '🛠️ Setup & Configuration', link: 'repo/user/setup_and_configuration' },
+						{ label: '⚙️ Setup & Configuration', link: 'repo/user/setup_and_configuration' },
+						{ label: '🔧 Troubleshooting', link: 'repo/user/troubleshooting' },
 					],
 				},
 				{
@@ -34,6 +36,7 @@ export default defineConfig({
 						{ label: 'Mastering TestForge', link: 'repo/user/userguide' },
 						{ label: '📋 Prompt Cheatbook', link: 'repo/user/promptcheatbook' },
 						{ label: '🔄 Core Workflows', link: 'repo/user/workflows' },
+						{ label: '🚀 Worked Examples', link: 'repo/user/workedexamples' },
 					],
 				},
 				{
@@ -50,8 +53,8 @@ export default defineConfig({
 					collapsed: true,
 					items: [
 						{ label: 'Master Tool Reference', link: 'api/tools' },
+						{ label: 'Class: ContextManager', link: 'api/agentbrain' },
 						{ label: 'Class: PageController', link: 'api/pagecontroller' },
-						{ label: 'Class: AgentBrain', link: 'api/agentbrain' },
 						{ label: 'Class: SandboxEngine', link: 'api/sandboxengine' },
 					],
 				},
@@ -59,10 +62,11 @@ export default defineConfig({
 					label: '📐 Architecture',
 					collapsed: true,
 					items: [
-						{ label: 'High-Level Overview', link: 'repo/technical/architecture' },
-						{ label: 'Technical Protocol', link: 'repo/technical/agentprotocol' },
+						{ label: 'System Architecture', link: 'repo/technical/architecture' },
+						{ label: 'Agent Protocol', link: 'repo/technical/agentprotocol' },
 						{ label: 'MCP Config Reference', link: 'repo/technical/mcp_config_reference' },
 						{ label: 'Security & Compliance', link: 'repo/technical/securityandcompliance' },
+						{ label: 'Accessibility', link: 'repo/technical/accessibility' },
 					],
 				},
 				{
@@ -72,6 +76,16 @@ export default defineConfig({
 						{ label: 'Continuous Integration', link: 'repo/maintenance/continuousintegration' },
 						{ label: 'Project Evolution', link: 'repo/maintenance/projectevolution' },
 						{ label: 'Containerization', link: 'repo/maintenance/dockersetup' },
+						{ label: 'Migration Guide', link: 'repo/maintenance/migrationguide' },
+					],
+				},
+				{
+					label: '🤝 Community & Help',
+					collapsed: true,
+					items: [
+						{ label: 'Community Support', link: 'repo/user/community' },
+						{ label: 'Frequently Asked Questions', link: 'repo/user/faq' },
+						{ label: 'What\'s New', link: 'repo/user/whatsnew' },
 					],
 				},
 			],

@@ -4,6 +4,10 @@ export interface ILearningRule {
     solution: string;
     tags: string[];
     timestamp: string;
+    rationale?: string;
+    antiPatterns?: string[];
+    linkedFile?: string;
+    scope?: 'global' | 'screen' | 'file';
 }
 export interface ILearningSchema {
     version: string;
@@ -21,12 +25,23 @@ export declare class LearningService {
     /**
      * Learns a new pattern and persists it to the project's autonomous knowledge base.
      */
-    learn(projectRoot: string, pattern: string, solution: string, tags?: string[]): ILearningRule;
+    learn(projectRoot: string, pattern: string, solution: string, tags?: string[], extras?: {
+        rationale?: string;
+        antiPatterns?: string[];
+        linkedFile?: string;
+        scope?: 'global' | 'screen' | 'file';
+    }): ILearningRule;
     /**
-     * Generates a rigid system instructions block containing the project's learned rules,
-     * meant to be injected into the MCP's generation prompts (Migration, BDD scaffolding, etc).
+     * Generates a system instructions block containing the project's learned rules,
+     * injected into generation prompts. Supports tag-based filtering and a recency cap
+     * to prevent prompt bloat on mature projects with many rules.
      */
-    getKnowledgePromptInjection(projectRoot: string, dynamicDirectives?: string[]): string;
+    getKnowledgePromptInjection(projectRoot: string, context?: {
+        tags?: string[];
+        screenName?: string;
+        toolName?: string;
+        maxRules?: number;
+    }, dynamicDirectives?: string[]): string;
     /** Deletes a specific rule by ID. Returns true if found and removed. */
     forget(projectRoot: string, ruleId: string): boolean;
     /**

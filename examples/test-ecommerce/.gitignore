@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.features-gen/
+test-results/
+playwright-report/
+*.env
+.env.*
+!.env.example
+test-data/users.*.json
+# Environment secrets
+.env.local
+
+# Environment secrets
+.env.staging
+
+# Environment secrets
+.env.prod

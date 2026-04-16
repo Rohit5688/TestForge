@@ -1,0 +1,104 @@
+---
+title: "🚀 Workflow: End-to-End Test Built by AI"
+description: "See how a TestForge user prompts an AI Agent to map a page, create page objects, and write a complete test suite entirely via MCP."
+---
+
+import { Steps } from '@astrojs/starlight/components';
+
+This guide walks through exactly how to collaborate with TestForge to build a resilient, BDD-compliant Playwright test suite from absolute scratch, using nothing but natural language prompts. 
+
+We will simulate building a test for a standard e-commerce "Add to Cart and Checkout" flow. 
+
+---
+
+## Step 1: Pre-Flight Check
+
+Before asking the AI to write code, always ensure the environment is healthy and the browser can connect to your local application.
+
+**You say:**
+> "Run a pre-flight check to ensure the project is ready and the development server at http://localhost:3000 is accessible."
+
+**TestForge Agent executes:**
+1. Calls `check_playwright_ready(baseUrl: "http://localhost:3000")`.
+2. Validates `mcp-config.json` has `baseUrl` populated.
+3. Successfully connects.
+
+---
+
+## Step 2: DOM Discovery & Inspection
+
+You should *never* write locators yourself. Instruct the AI to pull the live Accessibility Tree (which provides the most resilient semantic locators). 
+
+**You say:**
+> "Please inspect the target page at /products/1 using the sandbox. Extract the accurate semantic locators for the Add to Cart button, the Cart Icon, and the Product Title."
+
+**TestForge Agent executes:**
+1. Calls `inspect_page_dom(url: "http://localhost:3000/products/1")`.
+2. A headless persistent browser navigates to the page and returns the parsed semantic tree back into context.
+
+*Agent response:* 
+"I've inspected the DOM. I found the 'Add to Cart' button via `getByRole('button', { name: 'Add to Cart' })`, and the Cart icon via `getByTestId('cart-icon-badge')`."
+
+---
+
+## Step 3: Page Object Generation
+
+Now that the AI holds the DOM context in memory, instruct it to create the Page Object (POM) following the rigid BDD template.
+
+**You say:**
+> "Great, using those locators, please generate a BDD-compliant Page Object Model for the ProductPage. Implement methods to add an item to the cart and verify the cart badge updates. Save it."
+
+**TestForge Agent executes:**
+1. Generates the TypeScript code inheriting from the standard `BasePage`.
+2. Calls `validate_and_write(files: [{"path": "pages/ProductPage.ts", "content": "..."}])` to write it to disk atomically.
+
+---
+
+## Step 4: Feature File Generation
+
+Next, translate business requirements into Gherkin feature files. 
+
+**You say:**
+> "Now generate a robust Cucumber .feature file for the Add to Cart flow. Cover a happy path scenario where a user adds an item and proceeds to checkout. Make sure to define the step definitions referencing the ProductPage we just built. Commit them both."
+
+**TestForge Agent executes:**
+1. Calls `generate_gherkin_pom_test_suite` for structural context.
+2. Writes `features/checkout.feature` (the Gherkin scenarios).
+3. Writes `steps/checkout.steps.ts` (the glue code mapping Gherkin steps to `ProductPage` methods).
+4. Calls `validate_and_write()` to save both.
+
+---
+
+## Step 5: Native Execution and Verification
+
+A test isn't finished until you prove it executes successfully against the live app. 
+
+**You say:**
+> "Execute the newly created @checkout tests."
+
+**TestForge Agent executes:**
+1. Calls `run_playwright_test(tags: "@checkout")`.
+2. Runs the suite identically to how it runs in CI.
+
+*Agent response:*
+"Execution completed. 1 scenario passed, 5 steps executed in 4.2 seconds under the Chromium browser."
+
+---
+
+## What if a test fails? (The Auto-Heal Flow)
+
+If during Step 5 the test fails because an element was not found, you do not manually debug the log. You trigger the healing pipeline:
+
+**You say:**
+> "The test failed trying to find the Add to Cart button. Please heal it."
+
+**TestForge Agent executes:**
+1. Ingests the Playwright `ErrorDna` output.
+2. Calls `self_heal_test(errorDna)`.
+3. Calls `inspect_page_dom` again to view the live layout as it exists currently.
+4. Identifies the new correct locator.
+5. Calls `heal_and_verify_atomically()` to swap the selector in the live session and ensure the button can be clicked.
+6. Calls `validate_and_write` to permanently update `ProductPage.ts`.
+7. Calls `train_on_example` to add a rule to `mcp-learning.json` ensuring it remembers this locator style for future tests.
+
+By following this workflow, you keep the agent restricted to strict MCP boundaries, avoiding unstructured, hallucinatory code outputs. You write tests visually, semantically, and automatically.

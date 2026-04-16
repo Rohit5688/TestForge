@@ -1,92 +1,635 @@
 ---
-title: Master Tool Reference
-description: Technical specification for all TestForge MCP tools.
+title: 📚 Complete Tool Reference
+description: Full API reference for all TestForge MCP tools — every parameter, return type, and usage example.
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Tabs, TabItem, Card, CardGrid, Badge } from '@astrojs/starlight/components';
 
-This reference defines the public API for the TestForge MCP Server. These tools are used by AI agents to orchestrate the test lifecycle.
+This is the authoritative reference for all TestForge tools. Every tool exposed via the MCP protocol is documented here with its parameters, return shape, and a usage example.
 
-> [!IMPORTANT]
-> All tools return standardized JSON objects. Errors are surfaced with descriptive `message` and `code` fields for autonomous recovery.
+:::tip[Tool Selection Guide]
+If you're unsure which tool to use, ask: `"Which TestForge tool should I use to [goal]?"` — or run `workflow_guide` to get a step-by-step sequence for your task.
+:::
 
 ---
 
-## 🏗️ Workflow Orchestrators
-High-level tools that chain multiple atomic actions together.
+## 📋 Tool Index
+
+| Category | Tools |
+| :--- | :--- |
+| **Setup & Config** | `setup_project`, `repair_project`, `upgrade_project`, `manage_config`, `manage_env`, `manage_users` |
+| **Analysis** | `analyze_codebase`, `execute_sandbox_code`, `scan_structural_brain`, `get_system_state`, `get_token_budget` |
+| **Inspection** | `inspect_page_dom`, `start_session`, `navigate_session` |
+| **Discovery** | `discover_app_flow`, `export_navigation_map` |
+| **Generation** | `generate_gherkin_pom_test_suite`, `generate_test_data_factory`, `generate_ci_pipeline` |
+| **Validation & Writing** | `validate_and_write`, `create_test_atomically` |
+| **Execution** | `run_playwright_test`, `check_playwright_ready`, `check_environment` |
+| **Coverage** | `analyze_coverage`, `analyze_coverage_gaps`, `summarize_suite` |
+| **Quality** | `audit_locators`, `audit_utils`, `suggest_refactorings` |
+| **Healing** | `self_heal_test`, `heal_and_verify_atomically`, `verify_selector`, `update_visual_baselines` |
+| **Knowledge** | `train_on_example`, `export_team_knowledge` |
+| **Reporting** | `export_bug_report`, `export_jira_bug` |
+| **Navigation** | `workflow_guide`, `request_user_clarification` |
+
+---
+
+## 🔧 Setup & Configuration Tools
 
 ### `setup_project`
-Scaffolds a new project with best-practice configurations.
-- **Parameters**: 
-    - `projectRoot` (string): Absolute path to the directory.
-    - `overrides` (object): Partial `mcp-config.json` overrides.
-- **Side Effects**: Creates `mcp-config.json`, `pages/`, `features/`, and `tsconfig.json`.
+Bootstraps an empty directory into a fully configured Playwright-BDD project.
 
-### `heal_and_verify_atomically`
-The core of the autonomous engine. Identifies broken selectors, finds replacements, and verifies them on the live page in one call.
-- **Parameters**:
-    - `error` (string): The failing error message.
-    - `oldSelector` (string): The previous selector that failed.
-    - `projectRoot` (string): Path to the project.
-- **Returns**: `{ healedSelector, verified: boolean, confidence: number }`.
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Absolute path to the new or empty project directory |
 
----
+**Returns**: `{ filesCreated: string[], message: string }`
 
-## 🔍 Discovery & Inspection
-
-### `inspect_page_dom`
-Extracts a semantic, accessibility-aware tree of the current page.
-- **Parameters**:
-    - `url` (string): URL to navigate to (optional).
-    - `waitForSelector` (string): ID or CSS to wait for before extraction.
-    - `loginMacro` (string): Name of a predefined login flow to execute first.
-    - `includeIframes` (boolean): Whether to drill into cross-origin iframes.
-- **Logic**: Uses a weights-based algorithm to prune irrelevant DOM nodes (hidden, purely decorative) to save token budget.
+**Usage**:
+```
+"Initialize a new TestForge project at /Users/me/my-app and use chromium"
+```
 
 ---
 
-## ✍️ Generation & Writing
+### `repair_project`
+Regenerates missing baseline files without overwriting custom code. Safe to run at any time.
 
-### `validate_and_write`
-Ensures that generated code is syntactically correct before touching the disk.
-- **Parameters**:
-    - `files` (array): List of `{ path, content }` objects.
-    - `preview` (boolean): If true, returns validation results without writing.
-- **Validation Layers**:
-    1. **TypeScript Check**: Runs `tsc --noEmit` against the project tsconfig.
-    2. **Secret Audit**: Checks for hardcoded passwords or API keys.
-    3. **Gherkin Lint**: Validates Cucumber syntax integrity.
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Absolute path to the project |
 
----
+**Returns**: `{ filesRegenerated: string[], skipped: string[] }`
 
-## 🏃 Execution & Reporting
-
-### `run_cucumber_test`
-Executes tests in headful or headless mode.
-- **Parameters**:
-    - `tags` (string): Cucumber tag expression (e.g. `@smoke`).
-    - `parallel` (boolean): Whether to enable Playwright sharding.
-    - `runAsync` (boolean): Decouples execution from the MCP socket to prevent timeouts.
-- **Returns**: A `jobId` for asynchronous polling.
-
-### `check_test_status`
-Polls for the result of an asynchronous test run.
-- **Parameters**: `jobId` (string).
-- **Returns**: `{ status: "running" | "completed" | "failed", reportPath: string }`.
+**Usage**:
+```
+"Repair my TestForge project — some baseline files are missing"
+```
 
 ---
 
-## 🧹 Maintenance & Utilities
+### `upgrade_project`
+Upgrades npm packages and migrates `mcp-config.json` to the latest schema. Safe to re-run.
 
-### `suggest_refactorings`
-Analyzes the codebase for "Code Smells".
-- **Checks**:
-    - **Duplicate Steps**: Multiple features using different phrasing for the same logic.
-    - **XPath Overuse**: Identifies brittle selectors that should be converted to Role-based locators.
-    - **God Pages**: Page Objects exceeding 500 lines of code.
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `preview` | `boolean` | ❌ | Show what would change without writing (default: `false`) |
+
+**Returns**: `{ log: string[], warnings: string[], packagesUpdated: number }`
+
+---
 
 ### `manage_config`
-Programmatic manipulation of `mcp-config.json`.
-- **Operations**: `read`, `write`, `set_credentials`, `activate_build`.
-- **Safety**: Automatically backups the existing config before applying destructive changes.
+Read, write, preview, or scaffold `mcp-config.json`. Use `write` for partial updates — it deep-merges, not overwrites.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `operation` | `"read" \| "write" \| "scaffold" \| "preview" \| "inject_app"` | ✅ | Operation type |
+| `config` | `object` | ❌ | Partial config to merge in (for `write`/`preview`) |
+
+**Returns**: Full config object (on `read`) or confirmation (on `write`/`scaffold`).
+
+**Usage**:
+```
+"Update mcp-config.json to set baseUrl to https://staging.myapp.com"
+```
+
+---
+
+### `manage_env`
+Read, write, or scaffold the `.env` file. Automatically manages `.env.example`.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `action` | `"read" \| "write" \| "scaffold"` | ✅ | Operation |
+| `entries` | `{ key: string, value: string }[]` | ❌ | Key-value pairs to upsert (for `write`) |
+
+**Usage**:
+```
+"Add TEST_USER=admin@example.com and TEST_PASS=secret to the .env file"
+```
+
+---
+
+### `manage_users`
+Manage multi-environment test user accounts in `users.{env}.json`.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `action` | `"list" \| "add-role" \| "scaffold"` | ✅ | Operation |
+| `environment` | `string` | ❌ | Target environment (default: `currentEnvironment` from config) |
+| `roles` | `string[]` | ❌ | Role names to add (for `add-role`) |
+
+**Usage**:
+```
+"Add an 'admin' and 'readonly' role to the staging user store"
+```
+
+---
+
+## 🔬 Analysis Tools
+
+### `execute_sandbox_code` ⚡ Turbo Mode
+Executes JavaScript in an isolated V8 sandbox. **Use this instead of`analyze_codebase` for all analysis tasks** — 98% fewer tokens.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `script` | `string` | ✅ | JavaScript code to execute. Use `return` to return a value. Use `await forge.api.*()` to call services. |
+| `timeoutMs` | `number` | ❌ | Execution timeout in ms (default: `10000`) |
+
+**Available `forge.api` methods**:
+
+| Method | Description |
+| :--- | :--- |
+| `forge.api.readFile(path)` | Read file contents as string |
+| `forge.api.listFiles(dir, pattern)` | List files matching a glob |
+| `forge.api.analyzeCodebase(root, opts)` | Run AST analysis |
+| `forge.api.searchFiles(pattern, dir)` | Regex search across files |
+| `forge.api.getConfig()` | Read mcp-config.json |
+
+**Returns**: `{ success: boolean, result: any, executionTime: number }`
+
+**Example**:
+```javascript
+// Count all @smoke tagged scenarios without reading every file
+const files = await forge.api.listFiles('./features', '**/*.feature');
+let smokeCount = 0;
+for (const f of files) {
+  const content = await forge.api.readFile(f);
+  smokeCount += (content.match(/@smoke/g) || []).length;
+}
+return { smokeCount };
+```
+
+---
+
+### `analyze_codebase`
+⚠️ **Token-heavy.** Use `execute_sandbox_code` instead for analysis. Use this only for initial project onboarding in small projects (< 5 files).
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `customWrapperPackage` | `string` | ❌ | Package name for a custom base page |
+
+**Returns**: `{ existingSteps[], existingPageObjects[], existingUtils[] }`
+
+---
+
+### `scan_structural_brain`
+Scans the import graph to identify God Nodes (files with > 5 incoming imports). Use before any large refactor.
+
+**Returns**: Table of risky files that require extra caution when editing.
+
+---
+
+### `get_system_state`
+Returns a snapshot of the current session: DOM scan history, token cost, and turn counter. Use to check if an async job is running.
+
+**Returns**: `{ domHistory: Summary[], tokenCost: number, turnCount: number }`
+
+---
+
+### `get_token_budget`
+Returns a per-tool breakdown of estimated token usage for the current session.
+
+**Returns**: Formatted report with totals per tool call.
+
+---
+
+## 🔍 Inspection Tools
+
+### `inspect_page_dom`
+Launches a headless browser, navigates to a URL, and returns the Accessibility Tree. **Use this before generating Page Objects.**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `url` | `string` | ✅ | Full URL to inspect |
+| `storageState` | `string` | ❌ | Path to a Playwright storageState JSON to bypass login |
+| `loginMacro` | `object` | ❌ | Automated login sequence before visiting the target URL |
+| `waitForSelector` | `string` | ❌ | CSS selector to wait for before parsing (for slow SPAs) |
+| `includeIframes` | `boolean` | ❌ | Also scrape iframes (default: `false`) |
+| `projectRoot` | `string` | ❌ | Project root for loading config timeouts |
+
+**loginMacro shape**:
+```typescript
+{
+  loginUrl: string;
+  userSelector: string;
+  usernameValue: string;
+  passSelector: string;
+  passwordValue: string;
+  submitSelector: string;
+}
+```
+
+**Returns**: `{ accessibilityTree: Node[], pageTitle: string, url: string }`
+
+**Usage**:
+```
+"Inspect the DOM at https://app.mysite.com/dashboard — log in first with admin@test.com / password123"
+```
+
+---
+
+### `start_session`
+Starts a persistent Playwright browser session. Use for multi-step interactive tasks to avoid launching a new browser per action.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `headless` | `boolean` | ❌ | Hide the browser UI (default: `true`) |
+| `storageState` | `string` | ❌ | Path to storageState JSON (cookies/auth) |
+
+**Returns**: Session context object.
+
+---
+
+### `navigate_session`
+Navigates the persistent session to a new URL.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `url` | `string` | ✅ | Target URL |
+
+---
+
+## 🗺️ Discovery Tools
+
+### `discover_app_flow`
+Crawls your application from a start URL (same-origin only) and builds a navigation graph persisted to `.TestForge/navigation-map.json`.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `startUrl` | `string` | ✅ | URL to start crawling from |
+| `maxPages` | `number` | ❌ | Max pages to crawl (default: `25`) |
+| `storageState` | `string` | ❌ | Auth state for pre-authenticated crawls |
+
+**Returns**: `{ pagesDiscovered: number, diagram: mermaidString, knownPaths: string[] }`
+
+**Usage**:
+```
+"Map all the screens in my app starting from http://localhost:3000"
+```
+
+---
+
+### `export_navigation_map`
+Performs static analysis of feature files and page objects to build a URL navigation graph as a Mermaid diagram.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `forceRebuild` | `boolean` | ❌ | Re-analyze ignoring cache (default: `false`) |
+
+**Returns**: `{ diagram: string, knownScreens: string[], source: "static" | "live" | "seed" }`
+
+---
+
+## ✨ Generation Tools
+
+### `generate_gherkin_pom_test_suite`
+**The primary test generation tool.** Loads context from existing Page Objects, step definitions, and utilities, then returns a generation prompt that produces a full Playwright-BDD test suite.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `testDescription` | `string` | ✅ | Plain-English test intent |
+| `projectRoot` | `string` | ✅ | Project root |
+| `baseUrl` | `string` | ❌ | Override base URL for this generation |
+| `customWrapperPackage` | `string` | ❌ | Custom base page package |
+
+**Returns**: Generation prompt with context → LLM generates `.feature`, `Page.ts`, `steps.ts` as JSON → pass to `validate_and_write`.
+
+**Usage**:
+```
+"Generate a Playwright BDD test suite for the checkout flow at https://shop.example.com — test add to cart, proceed to checkout, and enter payment details"
+```
+
+---
+
+### `generate_test_data_factory`
+Generates a typed Faker.js data factory for mocking entities in tests.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `entityName` | `string` | ✅ | Name of the entity (e.g., `"User"`, `"Product"`) |
+| `schemaDefinition` | `string` | ✅ | Text description, JSON schema, or TypeScript interface defining the entity fields |
+
+**Usage**:
+```
+"Create a Faker.js factory for a User entity with fields: id (uuid), email, firstName, lastName, role (admin|viewer)"
+```
+
+---
+
+### `generate_ci_pipeline`
+Generates a fully-configured CI/CD pipeline template and writes it to disk.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `provider` | `"github" \| "gitlab" \| "jenkins"` | ✅ | CI provider |
+| `runOnPush` | `boolean` | ✅ | Trigger on git push/PR |
+| `runOnSchedule` | `string` | ❌ | Cron schedule (e.g., `"0 0 * * *"` for nightly) |
+| `nodeVersion` | `string` | ❌ | Node version (default: `"20"`) |
+
+---
+
+## 💾 Validation & Writing Tools
+
+### `validate_and_write`
+**The safety gate before any file touches disk.** Validates TypeScript and Gherkin syntax, runs a secret audit, then writes atomically. Supports up to 3 self-healing retries on failure.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `files` | `{ path: string, content: string }[]` | ✅ | Array of files to write |
+| `pageUrl` | `string` | ❌ | URL for DOM re-inspection during self-healing retries |
+| `dryRun` | `boolean` | ❌ | Audit/validate without writing (default: `false`) |
+
+**Returns**: `{ valid: boolean, filesWritten: string[], errors?: string[] }`
+
+---
+
+### `create_test_atomically`
+Orchestrator: validates then writes in a single call. Use when you've already generated the file content and want to skip manual chaining.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `generatedFiles` | `{ path: string, content: string }[]` | ✅ | Files to validate and write |
+
+**Returns**: `{ success: boolean, filesWritten: string[] }`
+
+---
+
+## 🚀 Execution Tools
+
+### `run_playwright_test`
+Executes the Playwright-BDD test suite. Runs **asynchronously** by default — returns a `jobId` immediately.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `tags` | `string` | ❌ | Cucumber tag expression, e.g., `"@smoke"` or `"@login and not @skip"` |
+| `overrideCommand` | `string` | ❌ | Custom run command (overrides `executionCommand` in config) |
+| `specificTestArgs` | `string` | ❌ | Additional args like a specific feature file path |
+
+**Returns (async)**: `{ status: "started", jobId: "job_xxx" }` → poll with `check_test_status`.
+
+**Async polling pattern**:
+```
+1. "Run the @smoke tests"           → returns jobId
+2. "Check status of [jobId]"        → check_test_status (wait 30s)
+3. "Summarize the test results"     → summarize_suite (after completion)
+```
+
+---
+
+### `check_playwright_ready`
+Pre-flight check: verifies Playwright, browsers, `baseUrl`, and `mcp-config.json`.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `baseUrl` | `string` | ❌ | Override URL to check reachability |
+| `forceRefresh` | `boolean` | ❌ | Ignore cache and run fresh checks |
+
+**Returns**: `{ ready: boolean, checks: { name, status, message }[] }`
+
+---
+
+### `check_environment`
+Full environment check: Node.js, Playwright, browsers, SDK paths, device availability, and config validation.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `baseUrl` | `string` | ❌ | Optional URL to test reachability |
+
+**Returns**: `{ summary, ready, failCount, warnCount, checks[] }`
+
+---
+
+## 📊 Coverage Tools
+
+### `analyze_coverage`
+Parses `.feature` files to identify untested screens and missing edge cases.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `featureFilesPaths` | `string[]` | ✅ | Paths to `.feature` files to analyze |
+
+**Returns**: `{ report: string, gaps: { screen, missingScenarios[] }[], prompt: string }`
+
+---
+
+### `analyze_coverage_gaps`
+Analyzes Istanbul/v8 LCOV coverage reports to identify deeply untested branches.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+
+**Returns**: Instructions to generate missing Playwright-BDD features for each gap.
+
+---
+
+### `summarize_suite`
+Reads all `.feature` files and returns a plain-English summary with tag breakdown and selective run commands.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+
+**Returns**: `{ totalScenarios, passed, failed, skipped, duration, failingScenarios[] }`
+
+---
+
+## 🔍 Quality Tools
+
+### `audit_locators`
+Scans Page Objects and flags brittle selectors. Returns a health score and Markdown report.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `pagesRoot` | `string` | ❌ | Relative path to pages dir (default: `"pages"`) |
+
+**Selector health scoring**:
+- ✅ `getByRole`, `getByLabel`, `getByTestId` — stable
+- ⚠️ CSS class (`.my-class`) — fragile
+- ❌ XPath — brittle, avoid
+
+---
+
+### `audit_utils`
+Scans the utils layer to report missing Playwright helper method wrappers.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `customWrapperPackage` | `string` | ❌ | Custom base page package name |
+
+**Returns**: `{ coveragePercent, missing[], actionableSuggestions[] }`
+
+---
+
+### `suggest_refactorings`
+Finds duplicate step definitions and unused Page Object methods. Run after multiple test generations to keep the codebase DRY.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+
+**Returns**: `{ duplicateStepCount, unusedMethodCount, xpathOverusePercent, report }`
+
+---
+
+## 🔧 Healing Tools
+
+### `self_heal_test`
+Analyzes a test failure to determine if it's a scripting issue (fixable) or an application issue (a real bug). Returns targeted fix instructions.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `errorDna` | `object` | ✅ | The structured error block from `run_playwright_test` output |
+| `pageUrl` | `string` | ❌ | Page URL — if provided, re-inspects the DOM automatically |
+| `projectRoot` | `string` | ❌ | Project root |
+
+**errorDna shape**:
+```typescript
+{
+  code: "Infrastructure" | "Logic" | "Transient";
+  causalChain: string;
+  originalError: string;
+}
+```
+
+---
+
+### `heal_and_verify_atomically`
+Orchestrator: heals → verifies → learns in a single call. Use when a test fails with a bad selector.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `error` | `string` | ✅ | Test failure error message |
+| `xml` | `string` | ✅ | Current DOM snapshot or page URL context |
+| `candidateSelector` | `string` | ✅ | The proposed replacement selector |
+| `oldSelector` | `string` | ❌ | Original failed selector (for better learning) |
+
+**Returns**: `{ healedSelector, verified, learned, confidence }`
+
+---
+
+### `verify_selector`
+Tests a CSS/XPath selector live in the persistent browser session without running a full test.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `selector` | `string` | ✅ | Selector to test |
+| `oldSelector` | `string` | ❌ | Original failed selector (to record a heal) |
+| `projectRoot` | `string` | ❌ | Project root (required for `autoTrain`) |
+| `autoTrain` | `boolean` | ❌ | Auto-record the fix in `mcp-learning.json` (default: `false`) |
+
+**Returns**: `{ exists, displayed, enabled, tagName, text }`
+
+---
+
+### `update_visual_baselines`
+Runs the Playwright test suite with `--update-snapshots` to rebaseline visual regression screenshots.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `tags` | `string` | ❌ | Filter by tag |
+| `specificTestArgs` | `string` | ❌ | Additional flags |
+
+---
+
+## 🧠 Knowledge Tools
+
+### `train_on_example`
+Saves a pattern fix to `mcp-learning.json`. All future generations automatically apply learned rules.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+| `issuePattern` | `string` | ✅ | The recurring error or pattern |
+| `solution` | `string` | ✅ | The exact fix or code snippet |
+| `tags` | `string[]` | ❌ | Module or feature tags |
+
+**Returns**: `{ ruleId, pattern, solution }`
+
+**Usage**:
+```
+"Train TestForge: whenever generating login page tests, always use getByLabel() for the email field, not getByPlaceholder()"
+```
+
+---
+
+### `export_team_knowledge`
+Exports the `mcp-learning.json` brain into a human-readable Markdown file for team review.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `projectRoot` | `string` | ✅ | Project root |
+
+---
+
+## 📊 Reporting Tools
+
+### `export_bug_report`
+Generates a Jira-ready Markdown bug report from a failed test, auto-classifying severity.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `testName` | `string` | ✅ | Name of the failing test |
+| `rawError` | `string` | ✅ | The Playwright error output |
+| `browser` | `string` | ❌ | Browser used |
+| `baseUrl` | `string` | ❌ | App URL |
+| `appVersion` | `string` | ❌ | Application version |
+
+---
+
+### `export_jira_bug`
+Extended bug report that incorporates file paths to Playwright Trace and Video recordings.
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `testName` | `string` | ✅ | Test name |
+| `rawError` | `string` | ✅ | Error output |
+
+---
+
+## 📍 Utility Tools
+
+### `workflow_guide`
+Returns step-by-step sequences for common workflows. **Start here if unsure which tool to use.**
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `workflow` | `"new_project" \| "write_test" \| "run_and_heal" \| "debug_flaky" \| "all"` | ❌ | Specific workflow to return |
+
+---
+
+### `request_user_clarification`
+Halts execution to prompt the human with a structured question. Used when AI finds ambiguity it cannot resolve autonomously (e.g., multiple matching files, platform ambiguity).
+
+| Parameter | Type | Required | Description |
+| :--- | :--- | :---: | :--- |
+| `question` | `string` | ✅ | The exact question (≤100 chars) |
+| `context` | `string` | ✅ | Why clarification is needed |
+| `options` | `{ id, label, detail, recommended }[]` | ❌ | Structured options as a numbered list |
+
+---
+
+## Related Pages
+
+- [MCP Config Reference](/TestForge/repo/technical/mcp_config_reference/) — all `mcp-config.json` fields
+- [Token Optimizer](/TestForge/repo/technical/tokenoptimizer/) — how to minimize token usage
+- [Prompt Cheatbook](/TestForge/repo/user/promptcheatbook/) — 35+ ready-to-paste prompts

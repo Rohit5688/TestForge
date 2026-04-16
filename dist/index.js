@@ -168,10 +168,13 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
 
 OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise what you just did. Acknowledge in <=10 words, then proceed. Keep response under 100 words unless explaining an error.`,
                 steps: [
-                    "1. analyze_codebase (or execute_sandbox_code) — Scan codebase architecture.",
-                    "2. inspect_page_dom — Get DOM snapshot of the Web App to get accurate selectors.",
-                    "3. generate_gherkin_pom_test_suite — Generate feature file, step definitions, and Page Object.",
-                    "4. validate_and_write — Validate TypeScript and write files to disk (it will also run the test)."
+                    "1. analyze_codebase (or execute_sandbox_code) — Scan codebase architecture ONCE. Cache result.",
+                    "2. FOR EACH PAGE in the flow — complete steps 2a–2c before moving to the next page:",
+                    "2a. inspect_page_dom — Inspect ONE page at a time. Do NOT inspect multiple pages before generating.",
+                    "2b. generate_gherkin_pom_test_suite — Generate the Page Object for THIS page only using its DOM snapshot.",
+                    "2c. validate_and_write — Write THIS page's files to disk before inspecting the next page.",
+                    "3. After all pages are complete: run_playwright_test to validate the full flow.",
+                    "CRITICAL: Never call inspect_page_dom for multiple pages before generating. One page at a time keeps token usage under control and context focused."
                 ]
             },
             run_and_heal: {
@@ -382,7 +385,7 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
             mcpConfig.write(projectRoot, config);
         }
         catch (e) { }
-        let memoryPrompt = learningService.getKnowledgePromptInjection(projectRoot, lastAnalysisResult.mcpLearnDirectives);
+        let memoryPrompt = learningService.getKnowledgePromptInjection(projectRoot, { toolName: 'generate_gherkin_pom_test_suite' }, lastAnalysisResult.mcpLearnDirectives);
         // TF-NEW-14: Inject relevant skill contextually
         try {
             const _filename = fileURLToPath(import.meta.url);
@@ -541,7 +544,7 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
         let memoryPrompt = '';
         let sessionTimeout = 30000;
         if (projectRoot) {
-            memoryPrompt = learningService.getKnowledgePromptInjection(projectRoot);
+            memoryPrompt = learningService.getKnowledgePromptInjection(projectRoot, { toolName: 'self_heal_test' });
             try {
                 const config = mcpConfig.read(projectRoot);
                 sessionTimeout = config.timeouts?.sessionStart ?? 30000;
@@ -1073,7 +1076,7 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
     {
         const { projectRoot, legacyCode, sourceDialect } = args;
         const codebaseContext = await analyzer.analyze(projectRoot);
-        const memoryPrompt = learningService.getKnowledgePromptInjection(projectRoot, codebaseContext.mcpLearnDirectives);
+        const memoryPrompt = learningService.getKnowledgePromptInjection(projectRoot, { toolName: 'migrate_test' }, codebaseContext.mcpLearnDirectives);
         const systemPrompt = seleniumMigrator.generateMigrationPrompt(projectRoot, legacyCode, sourceDialect, codebaseContext, memoryPrompt);
         return textResult(truncate(systemPrompt));
     }

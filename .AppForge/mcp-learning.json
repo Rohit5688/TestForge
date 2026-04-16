@@ -164,6 +164,19 @@
         "graph-sync"
       ],
       "timestamp": "2026-04-13T19:07:15.118Z"
+    },
+    {
+      "id": "rule-1776323842455",
+      "pattern": "Token bloat on multi-page E2E flows (5-page flows consuming 18k+ tokens)",
+      "solution": "Four-part fix: (1) Remove raw YAML block from SmartDomExtractor.extractFromAriaYaml — saves ~5k tokens per 5-page flow. (2) Set ContextManager.RECENT_SCANS_TO_KEEP=1 to drop prior page DOM from context. (3) Update workflow_guide write_test steps to enforce per-page inspect→generate→write loop. (4) Use keyword-relevance filter in TestGenerationService.generatePromptInstruction with MAX_STEPS=60 and MAX_PAGE_OBJECTS=10 caps.",
+      "tags": [
+        "token-efficiency",
+        "dom-inspection",
+        "context-management",
+        "learning-service",
+        "observability"
+      ],
+      "timestamp": "2026-04-16T07:17:22.456Z"
     }
   ]
 }

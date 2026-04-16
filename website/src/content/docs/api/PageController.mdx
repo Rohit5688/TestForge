@@ -1,64 +1,113 @@
 ---
-title: PageController API
-description: Technical specification for the DOM manipulation and Visual Feedback engine.
+title: "Class: PageController"
+description: The DOM operations layer — how TestForge extracts, indexes, and acts on page elements.
 ---
 
-import { Steps } from '@astrojs/starlight/components';
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Tabs, TabItem } from '@astrojs/starlight/components';
 
-The `PageController` is the low-level execution engine that interacts directly with browsers. It handles DOM extraction, element interaction, and the `SimulatorMask` visual overlay.
+`PageController` is TestForge's internal DOM interaction service. It wraps the Playwright `Page` object with:
+- **Accessibility-first element extraction**
+- **Indexed element addressing** (the LLM references elements by index, not raw selectors)
+- **Stability scoring** (prefers ARIA roles over brittle XPaths)
 
-> [!NOTE]
-> PageController is designed to be **LLM-Agnostic**. It provides a structured interface that any reasoning engine can consume.
-
-## 🌳 DOM Pipline
-
-### `getSimplifiedHTML()`
-Returns a pruned, token-efficient representation of the current page.
-- **Pruning Logic**:
-    - Removes all `<script>`, `<style>`, and `<svg>` contents.
-    - Filters out elements with `aria-hidden="true"`.
-    - Collapses deeply nested `<div>` wrappers that don't increase semantic meaning.
-- **Returns**: A simplified HTML string ready for LLM context windows.
-
-### `getPageInfo()`
-Extracts metadata about the current viewport and interactive state.
-- **Fields**: `url`, `title`, `vitals` (LCP, FID), `interactiveElementsCount`.
+:::note[Internal Service]
+`PageController` is not a directly-callable MCP tool. It is invoked automatically by `inspect_page_dom` and the Playwright test runner. This page documents its behavior to help you write better Page Objects that align with how TestForge discovers elements.
+:::
 
 ---
 
-## 🖱️ Interaction API
+## 🔍 Element Discovery Pipeline
 
-TestForge uses **Indexed Interactions**. Instead of passing raw CSS/XPath, the AI passes an `index` from the previously extracted tree. This prevents "Stale Element Reference" errors.
+When `inspect_page_dom` is called, `PageController` runs this pipeline:
 
-| Method | Parameters | Description |
-| :--- | :--- | :--- |
-| `clickElement` | `index: number` | Simulates a trusted human click on the element at the specified tree index. |
-| `inputText` | `index, text` | Clears and types text into the specified input element. |
-| `selectOption` | `index, value` | Selects a value from a dropdown or radio group. |
-| `scroll` | `{ direction: 'up'\|'down' }` | Performs a natural scroll to bring elements into viewport. |
-
----
-
-## 🎭 SimulatorMask (Visual Feedback)
-
-When `enableMask: true` is set in the constructor, TestForge injects a semi-transparent overlay into the browser.
-
-- **Blocking**: Prevents the human developer from accidentally clicking or interacting with the browser while the automation is running.
-- **Visual Cues**: Highlights the element currently being targeted by the AI in **Cyan (00FBFF)**.
-- **Auto-Dismiss**: The mask automatically fades out when the session is closed or a failure occurs.
+1. **Full page load**: Waits for `networkidle` or the specified `waitForSelector`.
+2. **Iframe expansion**: If `includeIframes: true`, recursively injects into each iframe's context.
+3. **Accessibility Tree capture**: Calls Playwright's `page.accessibility.snapshot()`.
+4. **Noise filtering**: Removes hidden, aria-hidden, decorative, and structural-only nodes.
+5. **Stability scoring**: Tags each element with its recommended locator strategy.
+6. **Index assignment**: Every actionable element gets a stable index for the session.
 
 ---
 
-## 🧠 Relevance Scoring Algorithm
+## 📊 Locator Strategy Priority
 
-`PageController` uses a proprietary scoring algorithm to decide which elements to surface to the AI.
+`PageController` always recommends the most stable available locator, in this order:
 
-```ts
-score = (typeWeight * visibilityFactor) + (arability * depthPenalty)
+| Priority | Strategy | Playwright Method | Why |
+| :---: | :--- | :--- | :--- |
+| 1st | ARIA role + accessible name | `getByRole('button', { name: 'Submit' })` | Survives HTML restructuring |
+| 2nd | Label text | `getByLabel('Email address')` | Tied to `<label>` contract |
+| 3rd | Test ID (`data-testid`) | `getByTestId('submit-btn')` | Dev-controlled, stable |
+| 4th | Placeholder text | `getByPlaceholder('Enter email')` | Input-specific |
+| 5th | Visible text | `getByText('Sign In')` | Last resort — breaks on i18n |
+| ❌ | XPath / CSS class | `page.locator('.btn-primary')` | Brittle — not recommended |
+
+When you run:
+```
+"Generate a Page Object for the login screen"
+```
+`PageController` will produce locators using this priority — you don't need to specify it.
+
+---
+
+## 🖼️ Handling Dynamic Pages
+
+For Single Page Applications (SPAs) or pages with delayed loading:
+
+```
+// Use waitForSelector in your prompt:
+"Inspect https://app.mysite.com/dashboard, wait for '.dashboard-loaded' before capturing"
 ```
 
-1. **Type Weight**: Buttons, Inputs, and Links are given a baseline of 10.0.
-2. **Visibility**: Elements in the current viewport receive a 1.5x multiplier.
-3. **ARIA Priority**: Elements with `role` or `aria-label` receive a 2.0x boost.
-4. **Depth Penalty**: Each level of nesting beyond 10 levels reduces the score by 0.5.
+Internally, `PageController` calls:
+```typescript
+await page.waitForSelector('.dashboard-loaded', { state: 'visible' });
+const snapshot = await page.accessibility.snapshot();
+```
+
+---
+
+## 🔐 storageState — Bypass Auth Walls
+
+For pages behind authentication, generate a stored session first:
+
+<Tabs>
+  <TabItem label="Generate storageState">
+    ```
+    "Log in to https://myapp.com with admin@test.com / password123 and save the session state"
+    ```
+    TestForge runs the loginMacro and saves the auth cookies to `.TestForge/auth.json`.
+  </TabItem>
+  <TabItem label="Reuse storageState">
+    ```
+    "Inspect https://myapp.com/dashboard using the saved session state at .TestForge/auth.json"
+    ```
+    Subsequent `inspect_page_dom` calls reuse the cookies — no login re-execution needed.
+  </TabItem>
+</Tabs>
+
+---
+
+## 🪟 Iframe Handling
+
+By default, `PageController` does not enter iframes. Enable with `includeIframes: true`:
+
+```
+"Inspect https://checkout.myapp.com — include iframes (the payment form is inside one)"
+```
+
+The extracted Accessibility Tree will include iframe content merged inline, with prefixed locators to distinguish them:
+
+```typescript
+// Generated Page Object for iframe elements
+readonly paymentIframe = this.page.frameLocator('[data-testid="payment-frame"]');
+readonly cardNumber = this.paymentIframe.getByLabel('Card number');
+```
+
+---
+
+## Related Tools
+
+- [`inspect_page_dom`](/TestForge/api/tools/) — The tool that invokes `PageController`
+- [`verify_selector`](/TestForge/api/tools/) — Test a selector live against the current page
+- [Locator Health Audit](/TestForge/api/tools/#audit_locators) — Check existing Page Objects for brittle selectors

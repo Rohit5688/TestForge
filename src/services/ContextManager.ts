@@ -31,7 +31,7 @@ export class ContextManager {
   private readonly COMPACT_AFTER_SCANS = 3;
 
   /** Keep this many recent scans full-size */
-  private readonly RECENT_SCANS_TO_KEEP = 2;
+  private readonly RECENT_SCANS_TO_KEEP = 1;
 
   private turnCounter = 0;
 

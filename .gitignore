@@ -2,7 +2,18 @@ node_modules/
 dist/
 binaries/
 test-results/
-.env
+.env*
 .mcp-staging/
 .pkg-cache/
 *.log
+
+# Project-specific temporary files
+.AppForge/
+.TestForge/
+graphify-out/
+mcp-logs/
+scratch/
+
+# IDE settings
+.vscode/
+.idea/
