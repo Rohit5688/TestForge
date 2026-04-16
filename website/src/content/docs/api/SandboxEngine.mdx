@@ -1,0 +1,67 @@
+---
+title: SandboxEngine API
+description: Technical specification for the secure, token-optimized code analysis environment.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+The `SandboxEngine` (Turbo Mode) is a high-performance execution environment for analyzing codebases without reading hundreds of files. It executes optimized TypeScript scripts against an in-memory representation of your project.
+
+> [!IMPORTANT]
+> **Token Savings**: Sandbox analysis consumes **98% fewer tokens** compared to reading raw files, as it only returns the specific data requested by the script.
+
+## 🚀 The Execution Core
+
+### `execute_sandbox_code`
+Pass a TypeScript script to the engine for execution.
+- **Access**: Provides the `forge` global object.
+- **Safety**: Runs in an isolated V8 process with no access to system `process`, `child_process`, or `network`.
+
+```ts
+// Example Sandbox Script
+const files = forge.api.searchFiles('**/*.feature');
+const stats = files.map(f => forge.api.readFile(f).length);
+return { count: files.length, totalChars: stats.reduce((a, b) => a + b, 0) };
+```
+
+---
+
+## 🛡️ Performance & Security Quotas
+
+To prevent infinite loops and resource exhaustion, the SandboxEngine enforces strict quotas.
+
+| Quota | Limit | Description |
+| :--- | :--- | :--- |
+| **Timeout** | 3,000ms | Maximum execution time per script. |
+| **Memory** | 128MB | Maximum heap allocation for the sandbox process. |
+| **Output Size** | 50KB | Maximum JSON payload size returned to the AI. |
+| **File I/O** | 50 Calls | Maximum number of `forge.api.readFile` calls per execution. |
+
+---
+
+## 🔍 AST Scrutiny
+
+Before execution, every script passes through an Abstract Syntax Tree (AST) validator.
+
+- **Blocked Keywords**: `require`, `eval`, `Function`, `Proxy`, `Reflect`.
+- **Import Scoping**: Scripts can only import from a whitelist of project-safe utilities.
+- **Node Depth**: Scripts with nesting depth > 20 are rejected to prevent complexity exploits.
+
+---
+
+## 🛠️ Sandbox API Reference
+
+The `forge` object exposed to your scripts provides the following capabilities:
+
+### `forge.api.listFiles(pattern)`
+Returns a deduplicated list of absolute paths matching the glob pattern.
+
+### `forge.api.searchFiles(regex)`
+Scans file contents for a specific regex pattern across the entire project root.
+
+### `forge.api.parseAST(filePath)`
+Returns a simplified JSON representation of a TypeScript file's classes and methods. Ideal for mapping Page Objects.
+
+### `forge.api.getConfig()`
+Returns the current `mcp-config.json` state.

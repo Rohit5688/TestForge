@@ -7,6 +7,7 @@ const base = '/TestForge';
 export default defineConfig({
 	site,
 	base,
+	trailingSlash: 'always',
 	integrations: [
 		starlight({
 			favicon: '/favicon.png',
@@ -16,49 +17,66 @@ export default defineConfig({
 				src: './src/assets/logo.png',
 			},
 			social: {
-				// github: 'https://github.com/Rohit5688/appium-cucumber-pom-mcp',
+				github: 'https://github.com/Rohit5688/playwright-bdd-mcp',
 			},
-			editLink: {
-				baseUrl: undefined,
-			},
+            lastUpdated: true,
 			sidebar: [
 				{
 					label: '🚀 Getting Started',
 					items: [
-						{ label: 'Onboarding', link: 'repo/user/onboarding' },
-						{ label: 'User Guide', link: 'repo/user/userguide' },
-						{ label: 'Workflows', link: 'repo/user/workflows' },
-						{ label: 'Prompt Cheatbook', link: 'repo/user/testforge_prompt_cheatbook' },
+						{ label: '⏱️ 5-Minute Quickstart', link: 'repo/user/quickstart' },
+						{ label: '🛠️ Setup & Configuration', link: 'repo/user/setup_and_configuration' },
 					],
 				},
 				{
-					label: '🛠️ Core Guides',
+					label: '📖 User Guides',
+					items: [
+						{ label: 'Mastering TestForge', link: 'repo/user/userguide' },
+						{ label: '📋 Prompt Cheatbook', link: 'repo/user/promptcheatbook' },
+						{ label: '🔄 Core Workflows', link: 'repo/user/workflows' },
+					],
+				},
+				{
+					label: '🛠️ Platform Core',
+					collapsed: true,
 					items: [
 						{ label: 'Test Generation', link: 'repo/technical/testgeneration' },
 						{ label: 'Execution & Healing', link: 'repo/technical/executionandhealing' },
-						{ label: 'Migration Guide', link: 'repo/technical/migrationguide' },
+						{ label: 'Token Optimization', link: 'repo/technical/tokenoptimizer' },
 					],
 				},
 				{
-					label: '📐 Reference',
+					label: '📚 API Reference',
+					collapsed: true,
 					items: [
-						{ label: 'Config Reference', link: 'repo/technical/mcp_config_reference' },
-						{ label: 'Security & Compliance', link: 'repo/technical/securityandcompliance' },
-						{ label: 'Accessibility Testing', link: 'repo/technical/accessibility' },
-						{ label: 'Token Optimizer', link: 'repo/technical/tokenoptimizer' },
+						{ label: 'Master Tool Reference', link: 'api/tools' },
+						{ label: 'Class: PageController', link: 'api/pagecontroller' },
+						{ label: 'Class: AgentBrain', link: 'api/agentbrain' },
+						{ label: 'Class: SandboxEngine', link: 'api/sandboxengine' },
 					],
 				},
 				{
-					label: '📈 Operations',
+					label: '📐 Architecture',
+					collapsed: true,
+					items: [
+						{ label: 'High-Level Overview', link: 'repo/technical/architecture' },
+						{ label: 'Technical Protocol', link: 'repo/technical/agentprotocol' },
+						{ label: 'MCP Config Reference', link: 'repo/technical/mcp_config_reference' },
+						{ label: 'Security & Compliance', link: 'repo/technical/securityandcompliance' },
+					],
+				},
+				{
+					label: '📈 Infrastructure',
+					collapsed: true,
 					items: [
 						{ label: 'Continuous Integration', link: 'repo/maintenance/continuousintegration' },
 						{ label: 'Project Evolution', link: 'repo/maintenance/projectevolution' },
-						{ label: 'Docker Setup', link: 'repo/maintenance/dockersetup' },
-						{ label: 'Team Collaboration', link: 'repo/user/teamcollaboration' },
+						{ label: 'Containerization', link: 'repo/maintenance/dockersetup' },
 					],
 				},
 			],
 		}),
+
 		{
 			name: 'sitemap-killer',
 			hooks: {

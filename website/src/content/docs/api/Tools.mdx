@@ -1,0 +1,92 @@
+---
+title: Master Tool Reference
+description: Technical specification for all TestForge MCP tools.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+This reference defines the public API for the TestForge MCP Server. These tools are used by AI agents to orchestrate the test lifecycle.
+
+> [!IMPORTANT]
+> All tools return standardized JSON objects. Errors are surfaced with descriptive `message` and `code` fields for autonomous recovery.
+
+---
+
+## 🏗️ Workflow Orchestrators
+High-level tools that chain multiple atomic actions together.
+
+### `setup_project`
+Scaffolds a new project with best-practice configurations.
+- **Parameters**: 
+    - `projectRoot` (string): Absolute path to the directory.
+    - `overrides` (object): Partial `mcp-config.json` overrides.
+- **Side Effects**: Creates `mcp-config.json`, `pages/`, `features/`, and `tsconfig.json`.
+
+### `heal_and_verify_atomically`
+The core of the autonomous engine. Identifies broken selectors, finds replacements, and verifies them on the live page in one call.
+- **Parameters**:
+    - `error` (string): The failing error message.
+    - `oldSelector` (string): The previous selector that failed.
+    - `projectRoot` (string): Path to the project.
+- **Returns**: `{ healedSelector, verified: boolean, confidence: number }`.
+
+---
+
+## 🔍 Discovery & Inspection
+
+### `inspect_page_dom`
+Extracts a semantic, accessibility-aware tree of the current page.
+- **Parameters**:
+    - `url` (string): URL to navigate to (optional).
+    - `waitForSelector` (string): ID or CSS to wait for before extraction.
+    - `loginMacro` (string): Name of a predefined login flow to execute first.
+    - `includeIframes` (boolean): Whether to drill into cross-origin iframes.
+- **Logic**: Uses a weights-based algorithm to prune irrelevant DOM nodes (hidden, purely decorative) to save token budget.
+
+---
+
+## ✍️ Generation & Writing
+
+### `validate_and_write`
+Ensures that generated code is syntactically correct before touching the disk.
+- **Parameters**:
+    - `files` (array): List of `{ path, content }` objects.
+    - `preview` (boolean): If true, returns validation results without writing.
+- **Validation Layers**:
+    1. **TypeScript Check**: Runs `tsc --noEmit` against the project tsconfig.
+    2. **Secret Audit**: Checks for hardcoded passwords or API keys.
+    3. **Gherkin Lint**: Validates Cucumber syntax integrity.
+
+---
+
+## 🏃 Execution & Reporting
+
+### `run_cucumber_test`
+Executes tests in headful or headless mode.
+- **Parameters**:
+    - `tags` (string): Cucumber tag expression (e.g. `@smoke`).
+    - `parallel` (boolean): Whether to enable Playwright sharding.
+    - `runAsync` (boolean): Decouples execution from the MCP socket to prevent timeouts.
+- **Returns**: A `jobId` for asynchronous polling.
+
+### `check_test_status`
+Polls for the result of an asynchronous test run.
+- **Parameters**: `jobId` (string).
+- **Returns**: `{ status: "running" | "completed" | "failed", reportPath: string }`.
+
+---
+
+## 🧹 Maintenance & Utilities
+
+### `suggest_refactorings`
+Analyzes the codebase for "Code Smells".
+- **Checks**:
+    - **Duplicate Steps**: Multiple features using different phrasing for the same logic.
+    - **XPath Overuse**: Identifies brittle selectors that should be converted to Role-based locators.
+    - **God Pages**: Page Objects exceeding 500 lines of code.
+
+### `manage_config`
+Programmatic manipulation of `mcp-config.json`.
+- **Operations**: `read`, `write`, `set_credentials`, `activate_build`.
+- **Safety**: Automatically backups the existing config before applying destructive changes.

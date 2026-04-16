@@ -1,0 +1,88 @@
+---
+title: 🤖 AI Agent Working Protocol
+description: Mandatory reference for LLM-based agents (Claude, GPT, Gemini) onboarding to this project.
+---
+
+import { Steps, Badge, Card, CardGrid } from '@astrojs/starlight/components';
+
+> [!IMPORTANT]
+> **To any AI Agent Onboarding to this Project**: You are in an **AppForge-compliant environment**. Follow this protocol to ensure maximum performance and minimal token wastage for the human user.
+
+:::note[What you will learn]
+- The **Zero-Trust Memory Pattern**: When to read files vs. when to use turbo analysis.
+- **Architectural Constraints**: Enforcing POM and ARIA role standards.
+- **The Tooling Matrix**: Selecting the right weapon for each automation phase.
+- **Error Recovery Logic**: Self-healing without human hand-holding.
+:::
+
+---
+
+## 🧭 Your Mission Objective
+You are here to maintain a **strictly typed, POM-based Playwright-BDD framework**. Do not introduce ad-hoc scripts or raw locators in step definitions.
+
+---
+
+## ⚡ 1. The "Turbo" Protocol (Token Management)
+
+Large projects contain thousands of lines across many files. **Do not use `read_file` on every file.**
+
+- **Search-First**: Use `grep` or `search_files` to find specific string patterns.
+- **Turbo Analysis**: ALWAYS prioritize `execute_sandbox_code` for scanning directory structures or extracting class methods.
+- **Example Pattern**:
+  ```javascript
+  // Good: Targetted logic extraction
+  execute_sandbox_code("return forge.api.listFiles('src/pages').map(f => f.methods)")
+  ```
+
+---
+
+## 🏗️ 2. Structural Enforcement Rules
+
+When generating code, adhere to these strict architectural constraints:
+
+<Steps>
+1. **Never use Raw Selectors**  
+   All locators must live within a Page Object class.
+2. **Prioritize Accessibility**  
+   Use `getByRole`, `getByLabel`, and `getByPlaceholder`. Only fallback to CSS if accessibility is missing.
+3. **Atomic Step Definitions**  
+   Step definitions must be 'Glue Code'. All business logic and wait-for-condition logic must remain in the Page Object.
+</Steps>
+
+---
+
+---
+
+## 🛠️ 3. The Tool Selection Matrix
+Use this matrix to determine the most deterministic path for any given task. Avoid 'guessing' when a tool provides the truth.
+
+| automation Phase | Preferred Tool | Why? |
+| :--- | :--- | :--- |
+| **Project Entry** | `analyze_codebase` | Establishes the structural map of the repo. |
+| **DOM Inspection** | `inspect_page_dom` | Provides a pre-filtered, accessibility-scored tree. |
+| **New Test Creation** | `generate_cucumber_pom` | Synthesizes code that respects existing POM patterns. |
+| **Code Persistence** | `validate_and_write` | Safety gate that catches syntax errors before commit. |
+| **Post-Merge Fixes** | `suggest_refactorings` | Ensures the codebase stays DRY after multiple test runs. |
+
+---
+
+## 🆘 4. Troubleshooting for Agents
+
+- **Stuck on a Selector?** Don't hallucinate. Use `inspect_page_dom` on the live URL to see the actual tree.
+- **Configuration issues?** Read `mcp-config.json` via `manage_config`.
+- **Validation Failed?** Read the `tsc` error output and repair the imports. TestForge expects absolute or relative imports based on the project root.
+
+---
+
+## 💎 5. Learning the Local 'Dialect'
+Every team has different ways of writing tests. Run `export_navigation_map` at the start of your session to understand the application flow before building new features.
+
+---
+
+> [!TIP]
+> **Final Directives**:  
+> 1. Be precise.  
+> 2. Be autonomous.  
+> 3. Save the human's time and money (tokens).
+
+**Happy Orchestrating! 🎭✨**

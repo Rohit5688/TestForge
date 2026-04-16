@@ -1,0 +1,198 @@
+---
+title: User Guide
+description: Master the TestForge ecosystem with advanced BDD orchestration.
+---
+
+import { Card, CardGrid, Badge, Steps, Tabs, TabItem, FileTree } from '@astrojs/starlight/components';
+
+Welcome to the TestForge User Guide. This guide is your definitive source for orchestrating professional-grade web automation using AI agents.
+
+:::note[What you will learn]
+- The **TestForge Philosophy**: Why orchestration beats ad-hoc automation.
+- How to configure the **`mcp-config.json`** brain for your project.
+- Strategies for **Multi-Environment** User and Credential management.
+- Best practices for **CI/CD Integration** and Failure Analysis.
+:::
+
+TestForge is not just a tool; it is a **Structured Methodology** for the Agentic Era. It enforces the **Page Object Model (POM)** pattern and Accessibility-first locators by design.
+
+:::tip[New to TestForge?]
+Check out our [⏱️ 5-Minute Quickstart](/TestForge/repo/user/quickstart/) to get up and running immediately.
+:::
+
+---
+
+## 🏛️ Project Architecture & DNA
+When you scaffold a new project with `setup_project`, TestForge injects a robust **Testing DNA** that ensures high-maintenance resistance.
+
+---
+
+## 🏗️ Project Architecture
+
+When you scaffold a new project with `setup_project`, TestForge creates a robust, industry-standard structure:
+
+<FileTree>
+- features/
+  - **login.feature** (BDD specs)
+- pages/
+  - **BasePage.ts** (Shared logic)
+  - **LoginPage.ts** (POM class)
+- step-definitions/
+  - **login.steps.ts** (Glue code)
+- test-data/
+  - **users.staging.json** (Credentials)
+- **mcp-config.json** (AI Brain settings)
+- **playwright.config.ts** (Execution config)
+</FileTree>
+
+---
+
+## 🛠️ The Power Tools Reference
+
+| Tool | Capability | When to Use |
+| :--- | :--- | :--- |
+| `inspect_page_dom` | Visual/Accessibility Analysis | Use when an element is 'invisible' or has dynamic classes. |
+| `execute_sandbox_code` | Performance Analysis | Analyzing large repo logic without flooding context windows. |
+| `heal_and_verify` | Atomic Self-Correction | Use when a test fails due to UI changes. **Auto-corrects source code.** |
+| `audit_locator_health` | Proactive Quality Control | Run before a release to find brittle selectors across all pages. |
+| `generate_test_data` | Dynamic Data Simulation | Creating realistic Faker.js factories for complex forms. |
+
+---
+
+## 🏗️ Technical Implementation Patterns
+
+Mastering these patterns ensures your tests are readable by both humans and AI agents.
+
+### 🌐 Handling Complex Iframes
+Many enterprise apps (like Stripe or Salesforce) use iframes. TestForge handles these via the `PageController` bridge.
+
+```typescript
+// pages/PaymentPage.ts
+async fillCardDetails(cardNumber: string) {
+    const frame = this.page.frameLocator('iframe[name="card-element"]');
+    await frame.getByPlaceholder('Card number').fill(cardNumber);
+}
+```
+
+### 🚦 Network Interception & Mocking
+To test edge cases (like 500 errors), instruct the agent to use the Playwright `route` API within the Page Object:
+
+```typescript
+// pages/UserTablePage.ts
+async mockEmptyResults() {
+    await this.page.route('**/api/users', route => route.fulfill({
+        status: 200,
+        body: JSON.stringify([])
+    }));
+}
+```
+
+---
+
+## 📑 Implementation Patterns
+
+<Tabs>
+  <TabItem label="Gherkin Spec">
+    ```gherkin
+    # features/auth.feature
+    Scenario: Admin Login
+      Given I navigate to the login page
+      When I login as "admin"
+      Then I should see the dashboard
+    ```
+  </TabItem>
+  <TabItem label="Page Object">
+    ```typescript
+    // pages/LoginPage.ts
+    export class LoginPage extends BasePage {
+      async loginAs(role: string) {
+        const { user, pass } = getUser(role);
+        await this.page.fill('#user', user);
+        await this.page.fill('#pass', pass);
+        await this.page.click('button[type="submit"]');
+      }
+    }
+    ```
+  </TabItem>
+  <TabItem label="Step Definition">
+    ```typescript
+    // step-definitions/auth.steps.ts
+    When('I login as {string}', async ({ loginPage }, role) => {
+      await loginPage.loginAs(role);
+    });
+    ```
+  </TabItem>
+</Tabs>
+
+---
+
+## 🆘 Troubleshooting: The Error Matrix
+
+:::caution[Heads Up]
+A `DNA: Locators.Broken` error occurs when the DOM changes. Don't panic!
+:::
+
+| Symptom | Probable Root Cause | The Fix 🛠️ |
+| :--- | :--- | :--- |
+| `DNA: Locators.Broken` | Selector churn in deployment. | Run `heal_and_verify_atomically`. |
+| `DNA: Environment.Missing` | Missing `.env` keys. | Use `manage_config` skip sync. |
+| `Undefined Step` | Gherkin/Regex mismatch. | Run `analyze_codebase` to re-index. |
+
+## 🧠 Knowledge Check: Failure Recovery
+
+<details>
+<summary>**Q1: My test failed with `Assertion.Failed`. Should I run the healer?**</summary>
+**Hint**: Assertion failures mean the code worked but the app state was wrong.
+**Answer**: No. `Assertion.Failed` usually indicates a real bug in the application logic. Save the logs and report it to the dev team. Only use the healer for `Locators.Broken`.
+</details>
+
+<details>
+<summary>**Q2: Does 'Atomic Healing' require me to manually copy-paste the fix?**</summary>
+**Answer**: No. If you use `heal_and_verify_atomically`, the tool will automatically update your source code file on disk once the fix is verified in the live browser.
+</details>
+
+---
+
+:::tip[CI/CD Integration]
+For maximum reliability, run your tests in CI with the `--reporter=json` flag. TestForge can then parse these JSON results to provide a high-fidelity **DNA Breakdown** of your entire suite's health.
+:::
+
+:::note[Pro Comment]
+Atomic Healing is 5x more reliable than traditional 'guess-and-check' healing because it performs a **Live Verification** on the target element before committing the change to your codebase.
+:::
+
+---
+
+## 🌟 Pro Tips
+
+:::note
+**Autonomous Healing**: In `validate_and_write`, the server will automatically re-inspect the DOM if a locator fails. **Trust the automation!**
+:::
+
+1.  **Environment Switching**: Use `TEST_ENVIRONMENT=staging` to toggle user stores.
+2.  **Custom Wrappers**: Set `basePageClass` in `mcp-config.json` to enforce your team's internal library.
+
+---
+
+## 🏗️ Knowledge Check: Enterprise Patterns
+
+<details>
+<summary>**Q1: Why does TestForge insist on putting locators inside Page classes?**</summary>
+**Pro Comment**: This is the **Single Point of Truth** principle. If a button changes, you only fix it in one file (the Page Object), and every test using that button is instantly healed. It prevents 'Locator Rot'.
+</details>
+
+<details>
+<summary>**Q2: What is the benefit of using `validate_and_write` instead of just writing the file?**</summary>
+**Answer**: `validate_and_write` is a safety gate. It runs a background TypeScript compilation to ensure that your new Page Object properly extends `BasePage` and doesn't have any typos that would break your CI/CD pipeline.
+</details>
+
+---
+
+:::note[Architect's Tip]
+When testing complex tables, use the **'Row-Object'** pattern. Define a method in your Page Object that takes a row index or ID, rather than hardcoding selectors for every cell.
+:::
+
+> [!IMPORTANT]
+> **Need more help?** Just paste your terminal error directly to the AI and say: *"Hey, run self_heal_test on this output!"*
+
+**Happy Testing! 🎭✨**

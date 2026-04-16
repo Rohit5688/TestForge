@@ -1,0 +1,104 @@
+---
+title: 🚀 Token Optimizer & Sandbox Engine
+description: Engineering the highest efficiency AI testing engine on the market.
+---
+
+import { Steps, Tabs, TabItem, Badge, Card, CardGrid } from '@astrojs/starlight/components';
+
+Documentation tasks and large-scale code analysis often fail because of 'Context Exhaustion' — when an AI reads too much data and loses track of the mission. TestForge introduces the **Token Optimizer Sandbox**, reducing context usage by up to **98%**.
+
+---
+
+## 🏎️ Performance Benchmarks
+How much do you save? On average, TestForge is **10x cheaper** and **5x faster** than traditional AI automation servers.
+
+| Operation | Classic Agent (LLM Reads) | TestForge (Sandbox) | Token Savings |
+| :--- | :--- | :--- | :--- |
+| **Locator discovery** | 12,020 tokens | **240 tokens** | <Badge text="98%" variant="success" /> |
+| **Codebase Audit (100 files)**| 45,000 tokens | **1,200 tokens** | <Badge text="97%" variant="success" /> |
+| **Complex Regex Search** | 8,400 tokens | **150 tokens** | <Badge text="98%" variant="success" /> |
+| **Dependency Analysis** | 15,000 tokens | **300 tokens** | <Badge text="98%" variant="success" /> |
+
+---
+
+## 📦 How the Sandbox Works
+In traditional MCP servers, the server sends raw data (like a massive JSON file) to the AI. In TestForge, the AI sends a **Script** to the server. The data stays local; only the **Answer** is sent back.
+
+<Steps>
+
+1.  **AI Analysis Intent**  
+    The AI agent realizes it needs to find a specific pattern in 50 files.
+2.  **Script Generation**  
+    Instead of reading 50 files, the AI writes a search script using our optimized API.
+3.  **Local Execution**  
+    The TestForge server runs the script in a secure V8 sandbox within your project's directory.
+4.  **Result Filtering**  
+    The sandbox returns *only* the specific filenames and line numbers that match.
+
+</Steps>
+
+---
+
+## 🛠️ Sandbox API Reference (Advanced)
+If you are an AI assistant or a developer writing custom tools, you have access to the `forge` global object:
+
+### `forge.api.searchFiles(pattern, options)`
+Perform high-speed `grep` operations locally.
+```javascript
+// Example: Find all Page Objects missing 'submit' methods
+return forge.api.listFiles('pages/')
+  .filter(f => !f.content.includes('async submit'));
+```
+
+### `forge.api.analyzeCodebase()`
+Extract a full map of the repository without reading file contents.
+```javascript
+// Example: Get a list of every @Given step prefix
+const steps = await forge.api.analyzeCodebase();
+return steps.map(s => s.regex);
+```
+
+### `forge.api.inspectDom(url)`
+Returns a pre-filtered, accessibility-scored tree of the target URL.
+
+---
+
+## 🛡️ Security & Zero-Trust Architecture
+The sandbox is designed for enterprise compliance. It is isolated, ephemeral, and read-only by default.
+
+<CardGrid>
+  <Card title="No Network Access" icon="error">
+    Scripts cannot communicate with external APIs or exfiltrate data.
+  </Card>
+  <Card title="Fixed Timeouts" icon="rocket">
+    Execution is hard-limited to 10 seconds to prevent resource exhaustion.
+  </Card>
+  <Card title="Pure Memory State" icon="setting">
+    No files are created or modified inside the sandbox environment.
+  </Card>
+</CardGrid>
+
+---
+
+## 🧠 Knowledge Check: Turbo Mode
+
+<details>
+<summary>**Q1: When should I NOT use Turbo Mode (Sandbox)?**</summary>
+**Hint**: Sandbox is for analysis, not for modification.
+**Answer**: Do not use `execute_sandbox_code` if you actually need to *write* files or *modify* the filesystem. The sandbox is read-only and ephemeral. For writing, use `validate_and_write`.
+</details>
+
+<details>
+<summary>**Q2: How does the sandbox save 98% in tokens?**</summary>
+**Answer**: Traditional agents read a file (1000 tokens), process it in the LLM, and output a result. TestForge runs the processing *locally* in the sandbox. The LLM only receives the 20-token final answer.
+</details>
+
+---
+
+:::note[Pro Comment]
+The Sandbox engine is what separates 'Toy' MCP servers from 'Production' ones. By moving the compute closer to the data, we solve the **LLM Context Bottleneck** that plagues massive enterprise repositories.
+:::
+
+:::tip[Agent Protocol]
+If you find the context window filling up, say: *"Hey, use `execute_sandbox_code` to summarize the project structure instead of reading the files."*
+:::

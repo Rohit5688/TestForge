@@ -1,73 +1,81 @@
 ---
-title: TestForge Docs
+title: TestForge
 description: Orchestrated Web Automation for AI Agents.
+template: splash
+editUrl: false
 hero:
-  tagline: Enterprise-grade MCP Server for orchestrated Playwright-BDD automation. Optimized for Claude Code, Claude Desktop, and GitHub Copilot.
+  tagline: "The World's First Architecturally-Aware MCP Server for Playwright. Total BDD Orchestration. Zero Context Bloat."
   image:
     file: ../../assets/logo.png
   actions:
-    - text: User Guide
-      link: ./repo/user/userguide/
-      icon: right-arrow
-    - text: Prompt Cheatbook
-      link: ./repo/user/testforge_prompt_cheatbook/
+    - text: ⏱️ Start in 5 Mins
+      link: /TestForge/repo/user/quickstart/
+      icon: rocket
+      variant: primary
+    - text: 📚 Explore the Docs
+      link: /TestForge/repo/user/userguide/
       icon: open-book
+    - text: GitHub
+      link: https://github.com/Rohit5688/playwright-bdd-mcp
+      icon: external
+      variant: minimal
 ---
 
-import { Card, CardGrid } from '@astrojs/starlight/components';
+import { Card, CardGrid, Badge } from '@astrojs/starlight/components';
 
-## The Strategic Advantage
+<div class="hero-bg-accent"></div>
 
-TestForge is not just an automation tool; it is a **Quality Intelligence Hub** designed for the agentic era.
+## 🧬 The Orchestration DNA
 
-<br />
+TestForge isn't just a library; it's a **Thinking Engine** for web automation.
 
 <CardGrid>
-	<Card title="Direct Connectivity" icon="puzzle">
-		A local-first MCP server that connects your local browser environment **directly** to Claude or GitHub Copilot without requiring intermediate SaaS bridge tokens.
+	<Card title="Autonomous Healing" icon="heart">
+		When selectors break, TestForge doesn't. It uses **Atomic Orchestration** to re-scan the live DOM, identify the updated Accessibility Role, and fix your source code in a single round-trip. No manual intervention required.
 	</Card>
-	<Card title="90% Cost Reduction" icon="approve-check">
-		**AST Turbo Mode** (Sandbox) surgically extracts specific code context instead of reading massive files, slashing LLM token consumption by up to 90%.
+	<Card title="Turbo-Sandbox Analysis" icon="rocket">
+		Achieve a **98% reduction in token usage**. Our local V8 engine processes massive DOM structures and codebase ASTs locally, sending only refined context to the LLM. 
 	</Card>
-	<Card title="AI Project Brain" icon="random">
-		Persistent memory stores project-specific patterns and POM conventions, preventing "Groundhog Day" engineering and accelerating generation.
+	<Card title="Architectural Enforcement" icon="shield-check">
+		TestForge is architecturally-aware. It mandates the **Page Object Model (POM)** pattern and prevents 'spaghetti code' by validating all generated logic against your project's custom structural brain.
 	</Card>
-	<Card title="Zero-Token Sandbox" icon="shield-check">
-		Complex data analysis and filtering happen in a local secure V8 sandbox, ensuring only high-value data is sent to your AI agent.
+	<Card title="Semantic Extraction" icon="magnifier">
+		Built for stability. TestForge generates tests using **Accessibility Roles** (ARIA), making your automation resilient to visual CSS changes and DOM restructuring.
 	</Card>
 </CardGrid>
 
 <br />
 
----
+## 🛠️ Performance & Compliance
 
-<br />
-
-## Core Capabilities
+Built for the scale of enterprise teams.
 
 <CardGrid stagger>
-	<Card title="MCP Native" icon="rocket">
-		Built from the ground up for the Model Context Protocol, allowing Claude and other AI agents to control browser sessions.
+	<Card title="Zero-Config CI/CD" icon="rocket">
+		Pre-built workflows for **GitHub Actions** and **GitLab**. Automated report capturing and DNA failure analysis out of the box.
 	</Card>
-	<Card title="Self-Healing" icon="heart">
-		Identify and fix broken selectors automatically using on-page Accessibility Tree analysis and fuzzy matching strategies.
+	<Card title="Secure Execution" icon="shield">
+		All sandbox operations run in an isolated, read-only memory space. Your local system and credentials stay protected.
 	</Card>
-	<Card title="AI Lifecycle" icon="pencil">
-		Automated test generation, validation, and maintenance powered by Few-Shot learning and real-time on-page context.
+	<Card title="Legacy to Modern" icon="document">
+		Migrate entire suites from **Selenium, Cypress, or Detox** to Playwright-BDD with the `migrate_test` toolchain.
 	</Card>
-	<Card title="Web-First Power" icon="laptop">
-		Unified BDD workflow powered by Playwright, enforcing strict POM structure and locator best practices.
-	</Card>
-	<Card title="Legacy Migration" icon="document">
-		Modernize your QA stack with automated migration paths from legacy Selenium (Java/Python) and Detox (JS).
-	</Card>
-	<Card title="Enterprise Scaling" icon="setting">
-		Concurrent session management, telemetry logging, and robust Error DNA taxonomy for production-grade CI/CD.
-	</Card>
-	<Card title="Semantic Actions" icon="sun">
-		Execute high-level browser actions through the Accessibility AOM, ensuring locators remain stable under UI churn.
-	</Card>
-	<Card title="Security Sandbox" icon="lock">
-		Enterprise-grade security using isolated V8 execution environments (Turbo Mode) for tool processes, protecting your host environment.
+	<Card title="Multi-Environment Stores" icon="setting">
+		Centralized user and credential management with environments-aware staging, production, and dev stores.
 	</Card>
 </CardGrid>
+
+<br />
+
+## High-Level Orchestration
+
+![TestForge Master Orchestration](../../assets/master_orchestration_2d.png)
+
+<br />
+
+:::tip[Ready to transform your QA?]
+Join the future of orchestrated automation. TestForge is currently in early access for enterprise partners.
+[Get Started Today](/TestForge/repo/user/userguide/)
+:::
+
+

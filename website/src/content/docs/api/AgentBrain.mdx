@@ -1,0 +1,53 @@
+---
+title: AgentBrain API
+description: Technical specification for the high-level reasoning and tool orchestration layer.
+---
+
+import { Steps } from '@astrojs/starlight/components';
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+The `AgentBrain` is the cognitive center of TestForge. It handles the translation of high-level user intents into atomic tool calls, manages state history, and performs the "Reflection" step before any destructive action (like file writing).
+
+> [!NOTE]
+> AgentBrain operates on the **Macro-to-Atomic Mapping** principle, preventing the AI from getting lost in low-level DOM noise.
+
+## 🧭 Plan Generation
+
+### `generatePlan(intent)`
+Converts a natural language request into a sequence of executable blocks.
+- **Context Awareness**: Reads the current `mcp-config.json` and legacy feature files to ensure standard patterns are reused.
+- **Safety Reflection**: Checks if the plan involves deleting files or modifying `.env` secrets.
+
+### `workflow_guide`
+A specialized submodule that provides official blueprints for common automation chains.
+- **Example Flow**: `setup` -> `inspect` -> `generate_pom` -> `write` -> `verify`.
+
+---
+
+## 🩹 Self-Healing Logic
+
+The `AgentBrain` doesn't just find a new selector; it attempts to understand **why** the old one failed (e.g., "The div wrapper was removed," or "The ID became dynamic").
+
+### `calculateHealedSelector()`
+1. **Accessibility Scan**: Probes the live tree for elements with the same Role and Name.
+2. **Fuzzy Text Matching**: If ARIA roles fail, it looks for elements with similar visible text contents.
+3. **Hierarchy Comparison**: Compares the sibling-structure of the old selector against the current DOM.
+
+---
+
+## 🪵 State & Telemetry
+
+TestForge tracks the "Mental State" of the agent throughout the session.
+
+- **`tokenBudget`**: Prevents the session from exceeding a specified cost limit.
+- **`toolChainHistory`**: A sequence of all tools called, used for debugging "Hallucinated" flows.
+- **`knowledgeItems`**: Fetches "Gotchas" and "Patterns" from the `.AppForge/learning.json` store to avoid repeating past mistakes.
+
+---
+
+## 🛡️ Security Boundaries
+
+`AgentBrain` enforces strict boundaries to prevent the AI from escaping the project root.
+
+- **Path Sanitization**: All file paths are resolved against `projectRoot`. Attempts to use `..` or absolute system paths are rejected.
+- **Credential Masking**: Secrets retrieved via `manage_config` are masked in the telemetry logs.

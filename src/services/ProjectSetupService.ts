@@ -404,76 +404,45 @@ export class ProjectSetupService {
   }
 
   public scaffoldMcpConfigReference(projectRoot: string) {
-    const content = [
-      '# MCP Config Reference — TestForge',
-      '',
-      'All fields below map directly to the `mcp-config.json` file in your project root.',
-      '',
-      '## Top-Level Fields',
-      '',
-      '| Field | Type | Description |',
-      '|-------|------|-------------|',
-      '| `version` | string | Schema version (e.g. `"2.4.0"`). Do not change manually. |',
-      '| `projectRoot` | string | Absolute path to your project root. Auto-set by `setup_project`. |',
-      '| `currentEnvironment` | string | Active env: `"local"`, `"staging"`, or `"prod"`. |',
-      '| `environments` | string[] | List of available environments (must have a matching `.env.<name>` file). |',
-      '| `browsers` | string[] | Playwright browsers to run tests in: `["chromium", "firefox", "webkit"]`. |',
-      '| `retries` | number | Number of Playwright test retries on failure. Default: `1`. |',
-      '| `authStrategy` | string | How users are loaded: `"users-json"` reads `test-data/users.{env}.json`. |',
-      '| `waitStrategy` | string | Playwright waitUntil value: `"domcontentloaded"` or `"networkidle"`. |',
-      '| `backgroundBlockThreshold` | number | Background element block sensitivity. Default: `3`. |',
-      '',
-      '## `tags` (string[])',
-      'List of Cucumber/Playwright-BDD tags to include by default. Example: `["@smoke", "@regression"]`.',
-      '',
-      '## `envKeys` (object)',
-      'Maps logical names to `.env` variable names. Example:',
-      '```json',
-      '{ "baseUrl": "BASE_URL" }',
-      '```',
-      '',
-      '## `dirs` (object)',
-      'Override the default directory paths. All paths are relative to `projectRoot`.',
-      '',
-      '| Key | Default |',
-      '|-----|---------|',
-      '| `features` | `"features"` |',
-      '| `pages` | `"pages"` |',
-      '| `stepDefinitions` | `"step-definitions"` |',
-      '| `testData` | `"test-data"` |',
-      '',
-      '## `timeouts` (object)',
-      '',
-      '| Key | Default | Description |',
-      '|-----|---------|-------------|',
-      '| `testRun` | `120000` | Max milliseconds for a full test run. |',
-      '| `sessionStart` | `30000` | Max milliseconds to establish a Playwright session. |',
-      '| `healingMax` | `3` | Max self-healing attempts before asking for user input. |',
-      '',
-      '## `additionalDataPaths` (string[])',
-      'Relative paths to extra JSON/text files the agent should inject into prompts.',
-      'Example: `["docs/api-registry.json", "feature-flags.json"]`.',
-      '',
-      '## `architectureNotesPath` (string)',
-      'Relative path to a Markdown file with project architecture notes. The agent reads this file and uses it as context during generation.',
-      '',
-      '## `a11yStandards` (string[])',
-      'Axe-core tag list for accessibility checks. Example: `["wcag2aa", "wcag21aa"]`.',
-      '',
-      '## `a11yReportPath` (string)',
-      'Where accessibility reports are written. Default: `"test-results/a11y-report.json"`.',
-      '',
-      '## `reporting` (object) — optional',
-      'Reporter configuration. Example:',
-      '```json',
-      '{ "html": true, "json": "test-results/report.json" }',
-      '```',
-    ].join('\n');
-    fs.writeFileSync(path.join(projectRoot, 'docs', 'MCP_CONFIG_REFERENCE.md'), content, 'utf-8');
+    const docsDir = path.join(projectRoot, 'docs');
+    if (!fs.existsSync(docsDir)) {
+      fs.mkdirSync(docsDir, { recursive: true });
+    }
+
+    const sourceDoc = path.join(__dirname, '../../docs/technical/MCP_CONFIG_REFERENCE.md');
+    const targetDoc = path.join(projectRoot, 'docs/MCP_CONFIG_REFERENCE.md');
+    
+    if (fs.existsSync(sourceDoc)) {
+      fs.copyFileSync(sourceDoc, targetDoc);
+    } else {
+      const content = [
+        '# MCP Config Reference — TestForge',
+        '',
+        'See the full documentation at: https://github.com/ForgeTest-AI/TestForge/blob/main/docs/technical/MCP_CONFIG_REFERENCE.md',
+      ].join('\n');
+      fs.writeFileSync(targetDoc, content, 'utf-8');
+    }
   }
 
   public scaffoldPromptCheatbook(projectRoot: string) {
-    fs.writeFileSync(path.join(projectRoot, 'docs', 'PROMPT_CHEATBOOK.md'), '# Prompt Cheatbook\nPrompts for TestForge.', 'utf-8');
+    const docsDir = path.join(projectRoot, 'docs');
+    if (!fs.existsSync(docsDir)) {
+      fs.mkdirSync(docsDir, { recursive: true });
+    }
+
+    const sourceDoc = path.join(__dirname, '../../docs/user/PROMPT_CHEATBOOK.md');
+    const targetDoc = path.join(projectRoot, 'docs/PROMPT_CHEATBOOK.md');
+    
+    if (fs.existsSync(sourceDoc)) {
+      fs.copyFileSync(sourceDoc, targetDoc);
+    } else {
+      const content = [
+        '# Prompt Cheatbook — TestForge',
+        '',
+        'See the full cheatbook at: https://github.com/ForgeTest-AI/TestForge/blob/main/docs/user/PROMPT_CHEATBOOK.md',
+      ].join('\n');
+      fs.writeFileSync(targetDoc, content, 'utf-8');
+    }
   }
 
   public scanConfigureMe(projectRoot: string): string[] {
