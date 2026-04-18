@@ -41,13 +41,14 @@ export class JsonToPomTranspiler {
           lines.push(`  constructor(page: Page) {`);
           lines.push(`    super(page);`);
         } else {
-          lines.push(`  readonly page: Page;`);
+          lines.push(`  protected readonly page: Page;`);
           lines.push(`  constructor(page: Page) {`);
           lines.push(`    this.page = page;`);
         }
         for (const loc of pom.locators) {
-          const safeSelector = (loc.selector ?? '').replace(/'/g, "\\'");
-          lines.push(`    this.${loc.name} = this.page.locator('${safeSelector}');`);
+          // selector is already a fully-formed Playwright API call (page.getByRole, page.getByTestId...)
+          // Assign it verbatim. Do NOT wrap in page.locator().
+          lines.push(`    this.${loc.name} = this.${loc.selector};`);
         }
         lines.push(`  }`);
         lines.push('');

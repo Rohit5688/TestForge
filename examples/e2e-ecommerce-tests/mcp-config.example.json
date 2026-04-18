@@ -1,0 +1,45 @@
+{
+  "version": "2.4.0",
+  "tags": [
+    "@smoke",
+    "@regression",
+    "@e2e",
+    "@a11y"
+  ],
+  "envKeys": {
+    "baseUrl": "BASE_URL"
+  },
+  "dirs": {
+    "features": "features",
+    "pages": "pages",
+    "stepDefinitions": "step-definitions",
+    "testData": "test-data"
+  },
+  "browsers": [
+    "chromium"
+  ],
+  "timeouts": {
+    "testRun": 120000,
+    "sessionStart": 30000,
+    "healingMax": 3
+  },
+  "retries": 1,
+  "backgroundBlockThreshold": 3,
+  "credentials": {
+    "strategy": "users-json"
+  },
+  "currentEnvironment": "staging",
+  "environments": [
+    "local",
+    "staging",
+    "prod"
+  ],
+  "waitStrategy": "domcontentloaded",
+  "architectureNotesPath": "docs/mcp-architecture-notes.md",
+  "additionalDataPaths": [],
+  "a11yStandards": [
+    "wcag2aa"
+  ],
+  "a11yReportPath": "test-results/a11y-report.json",
+  "enableVisualExploration": false
+}

@@ -32,6 +32,9 @@ import { PipelineService } from "./services/PipelineService.js";
 import { PlaywrightSessionService } from "./services/PlaywrightSessionService.js";
 import { ASTScrutinizer } from "./utils/ASTScrutinizer.js";
 import { JsonToPomTranspiler, type JsonPageObject } from "./utils/JsonToPomTranspiler.js";
+import { JsonToStepsTranspiler, type JsonStepFile } from "./utils/JsonToStepsTranspiler.js";
+import { TestContextGathererService } from "./services/TestContextGathererService.js";
+import type { TestContext } from "./types/TestContext.js";
 import type { CodebaseAnalysisResult } from "./interfaces/ICodebaseAnalyzer.js";
 import { sanitizeOutput, auditGeneratedCode } from "./utils/SecurityUtils.js";
 import { executeSandbox } from "./services/SandboxEngine.js";
@@ -59,6 +62,7 @@ import { ErrorDistiller } from "./utils/ErrorDistiller.js";
 import { OrchestrationService } from "./services/OrchestrationService.js";
 import { NavigationGraphService } from "./services/NavigationGraphService.js";
 import { DnaTrackerService } from "./services/DnaTrackerService.js";
+import { TraceAnalyzerService } from "./services/TraceAnalyzerService.js";
 
 // SOLID: Dependency Injection Root
 const analyzer = new CodebaseAnalyzerService();
@@ -67,6 +71,7 @@ const generator = new TestGenerationService();
 const runner = new TestRunnerService();
 const domInspector = new DomInspectorService();
 const selfHealer = new SelfHealingService();
+const traceAnalyzer = new TraceAnalyzerService();
 const fileWriter = new FileWriterService();
 const envManager = new EnvManagerService();
 const projectSetup = new ProjectSetupService();
@@ -137,6 +142,12 @@ const originalRegisterTool = server.registerTool.bind(server);
 // or rapid sequential usage — Client B's analysis overwrites Client A's before
 // Client A's generation runs, producing wrong POM suggestions.
 const analysisCache = new Map<string, CodebaseAnalysisResult>();
+
+// Server-side DOM JSON context cache (projectRoot → JSON string from inspect_page_dom)
+// Populated automatically when inspect_page_dom is called with returnFormat:'json'.
+// Consumed automatically by generate_gherkin_pom_test_suite if domJsonContext is not
+// explicitly passed. Keyed by projectRoot so multi-project sessions stay isolated.
+const domInspectionCache = new Map<string, string>();
 
 // TASK-64: Per-projectRoot NavigationGraphService instances
 const navGraphServices = new Map<string, NavigationGraphService>();
@@ -421,18 +432,22 @@ server.registerTool(
   {
     description: `WHEN TO USE: To generate a standard Playwright BDD test suite. WHAT IT DOES: Generates feature files and POM instructions. HOW IT WORKS: Returns a rigid system instruction context to the client LLM, ensuring the chat completion generates the requested Playwright-BDD JSON structure based on previously analyzed context.
 
+AUTO-INJECTION: If inspect_page_dom was previously called with returnFormat:'json' for this project, the server automatically injects the element reference into the generation prompt. No extra parameters needed.
+
 OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise what you just did. Acknowledge in <=10 words, then proceed. Keep response under 100 words unless explaining an error.`,
     inputSchema: z.object({
       "testDescription": z.string().describe("Plain English test intent."),
       "projectRoot": z.string().describe("Absolute path to the automation project."),
       "customWrapperPackage": z.string().optional(),
-      "baseUrl": z.string().optional()
+      "baseUrl": z.string().optional(),
+      "domJsonContext": z.string().optional().describe("Optional: JSON string of elements from inspect_page_dom(returnFormat:'json'). When provided, locators are injected into the generation prompt as explicit field references."),
+      "testContext": z.string().optional().describe("Optional: JSON string of TestContext from gather_test_context. When provided, verified DOM elements and network calls are injected into the generation prompt, enabling first-pass correct selector and waitForResponse generation.")
     }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
   },
   async (args) => {
     {
-      const { testDescription, projectRoot, customWrapperPackage, baseUrl } = args as any;
+      const { testDescription, projectRoot, customWrapperPackage, baseUrl, domJsonContext, testContext: testContextJson } = args as any;
       await maintenance.ensureUpToDate(projectRoot);
       const config = mcpConfig.read(projectRoot);
       const resolvedWrapper = customWrapperPackage || config.basePageClass;
@@ -458,6 +473,30 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
         lastAnalysisResult.mcpLearnDirectives
       );
 
+      // Custom-wrapper selectorArgs translation note:
+      // When a custom base page is in use, the LLM must translate the selectorArgs
+      // (method/role/name/testId/placeholder) into the wrapper's own API, NOT copy
+      // the page.getBy*() strings verbatim. The locator string is still shown as a
+      // semantic reference, but the actual Page Object code must call the wrapper.
+      if (resolvedWrapper) {
+        memoryPrompt += `
+
+--- CUSTOM WRAPPER SELECTOR RULES ---
+This project uses a custom base page / wrapper: ${JSON.stringify(resolvedWrapper)}
+
+When you see selectorArgs in the JSON DOM snapshot, translate them using the wrapper's API:
+  • selectorArgs { method:'getByRole', role:'button', name:'Submit' }
+    → call whatever the wrapper exposes: e.g. this.clickButton('Submit') or super.getByRole('button',{name:'Submit'})
+  • selectorArgs { method:'getByLabel', name:'Email' }
+    → wrapper: e.g. this.fillByLabel('Email', value)
+  • selectorArgs { method:'getByTestId', testId:'submit-btn' }
+    → wrapper: e.g. this.getByTestId('submit-btn') or equivalent
+
+DO NOT copy page.getBy*() strings from the locator field verbatim if the wrapper has its own method.
+The wrapper's method may wrap the locator internally — follow the wrapper's documented API.
+--- END CUSTOM WRAPPER SELECTOR RULES ---`;
+      }
+
       // TF-NEW-14: Inject relevant skill contextually
       try {
         const _filename = fileURLToPath(import.meta.url);
@@ -481,13 +520,35 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
         console.error("Failed to load skills:", e);
       }
 
+      // Auto-passthrough: if domJsonContext wasn't explicitly supplied by the LLM,
+      // check the server-side cache populated by inspect_page_dom(returnFormat:'json').
+      // This makes the JSON context flow transparent — no LLM parameter wrangling needed.
+      const resolvedDomContext: string | undefined =
+        domJsonContext ||
+        domInspectionCache.get(projectRoot) ||
+        undefined;
+
+      // Parse testContext JSON if provided — this is the rich pre-generation context
+      // from gather_test_context. If absent, the generation prompt will direct the LLM
+      // to call gather_test_context before writing any code.
+      let resolvedTestContext: TestContext | undefined;
+      if (testContextJson) {
+        try {
+          resolvedTestContext = JSON.parse(testContextJson) as TestContext;
+        } catch {
+          // Malformed JSON — silently ignore, treat as absent
+        }
+      }
+
       const instruction = await generator.generatePromptInstruction(
         testDescription,
         projectRoot,
         lastAnalysisResult,
         resolvedWrapper,
         baseUrl,
-        memoryPrompt
+        memoryPrompt,
+        resolvedDomContext,
+        resolvedTestContext,
       );
 
       return textResult(truncate(instruction));
@@ -498,6 +559,47 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
 
 
 import { ErrorClassifier } from "./utils/ErrorClassifier.js";
+
+// ── gather_test_context ────────────────────────────────────────────────────────
+// Pre-generation context gatherer: visits URLs headlessly, captures verified DOM
+// elements and XHR/fetch network calls — the two data points that let the LLM
+// write correct selectors and waitForResponse() on the first pass.
+const testContextGatherer = new TestContextGathererService();
+
+server.registerTool(
+  "gather_test_context",
+  {
+    description: `WHEN TO USE: BEFORE calling generate_gherkin_pom_test_suite when writing tests for a web app you have NOT inspected yet. WHAT IT DOES: Visits each URL in your test flow, captures verified DOM elements (roles, labels, Playwright locators) and XHR/fetch network calls (for waitForResponse patterns) from a headless browser. HOW IT WORKS: Pass the base URL and the relative paths involved in your test. The returned JSON (testContext) should be passed as-is to generate_gherkin_pom_test_suite — this eliminates selector guessing and flaky page-load waits, achieving first-pass correct code generation.
+
+OUTPUT: JSON string of TestContext. Pass it verbatim to generate_gherkin_pom_test_suite as the testContext parameter.`,
+    inputSchema: z.object({
+      "baseUrl": z.string().describe("Base URL of the application, e.g. https://app.example.com"),
+      "paths": z.array(z.string()).describe("Relative paths to visit in order, e.g. [\"/login\", \"/dashboard\"]. May also be full URLs."),
+      "storageState": z.string().optional().describe("Path to Playwright storageState JSON for pre-authenticated crawls."),
+      "loginMacro": z.object({
+        "loginPath": z.string(),
+        "userSelector": z.string(),
+        "usernameValue": z.string(),
+        "passSelector": z.string(),
+        "passwordValue": z.string(),
+        "submitSelector": z.string()
+      }).optional().describe("Optional: perform a login before visiting protected paths.")
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true }
+  },
+  async (args) => {
+    const { baseUrl, paths, storageState, loginMacro } = args as any;
+    try {
+      const ctx = await testContextGatherer.gather({ baseUrl, paths, storageState, loginMacro });
+      return textResult(JSON.stringify(ctx, null, 2));
+    } catch (err: any) {
+      return {
+        content: [{ type: 'text', text: `❌ gather_test_context failed: ${err?.message ?? String(err)}` }],
+        isError: true
+      };
+    }
+  }
+);
 
 server.registerTool(
   "run_playwright_test",
@@ -582,6 +684,8 @@ server.registerTool(
   {
     description: `WHEN TO USE: BEFORE generating Page Objects. WHAT IT DOES: Navigates to a target URL in a headless browser and returns the Accessibility Tree (semantic DOM). HOW IT WORKS: Extracts exact locators (names, roles, test ids) to ensure 100% accuracy.
 
+TIP: Use returnFormat:'json' when you plan to call generate_gherkin_pom_test_suite next. The server automatically caches the JSON result and injects it into the generation prompt — no manual parameter passing needed.
+
 OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise what you just did. Acknowledge in <=10 words, then proceed. Keep response under 100 words unless explaining an error.`,
     inputSchema: z.object({
       "url": z.string().describe("The full URL to inspect (e.g. http://localhost:3000/login)."),
@@ -589,6 +693,10 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
       "storageState": z.string().describe("Optional absolute path to a Playwright storageState JSON file to bypass login.").optional(),
       "includeIframes": z.boolean().describe("Set to true to also scrape accessibility trees inside nested iframes.").optional(),
       "projectRoot": z.string().describe("Optional absolute path to the automation project for loading config timeouts.").optional(),
+      "returnFormat": z.enum(["markdown", "json"]).optional().describe(
+        "Output format. 'markdown' (default) returns Actionable Markdown for LLM prompts. " +
+        "'json' returns flat JsonElement[] with selectorArgs — use this for custom-wrapper-aware POM generation."
+      ),
       "loginMacro": z.object({
         "loginUrl": z.string(),
         "userSelector": z.string(),
@@ -602,7 +710,7 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
   },
   async (args) => {
     {
-      const { url, waitForSelector, storageState, includeIframes, loginMacro, projectRoot } = args as any;
+      const { url, waitForSelector, storageState, includeIframes, loginMacro, projectRoot, returnFormat } = args as any;
       let sessionTimeout = 30000;
       let enableVisualMode = false;
       if (projectRoot) {
@@ -617,9 +725,18 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
           enableVisualMode = config.enableVisualExploration ?? false;
         } catch { /* ignore */ }
       }
-      const domTree = await domInspector.inspect(url, waitForSelector, storageState, includeIframes, loginMacro, sessionTimeout, enableVisualMode);
+      const domTree = await domInspector.inspect(url, waitForSelector, storageState, includeIframes, loginMacro, sessionTimeout, enableVisualMode, returnFormat ?? 'markdown');
       // TASK-67: Record DOM scan for context compression
       ContextManager.getInstance().recordScan(url, domTree);
+
+      // Auto-passthrough: when the caller requested JSON, cache the raw JSON string
+      // so generate_gherkin_pom_test_suite can inject it without explicit parameter.
+      // projectRoot is optional on this tool — fall back to URL as a soft key.
+      if (returnFormat === 'json') {
+        const cacheKey = projectRoot ?? url;
+        domInspectionCache.set(cacheKey, domTree);
+      }
+
       const _domBudgetFooter = TokenBudgetService.getInstance().trackToolCall('inspect_page_dom', url, domTree);
       // TASK-52: ContextPulse — append compacted history when enough scans exist
       const _domHistory = ContextManager.getInstance().getCompactedHistory();
@@ -681,6 +798,30 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
   }
 );
 
+server.registerTool(
+  "analyze_trace",
+  {
+    description: `WHEN TO USE: After a test fails OR when a test is flaky. WHAT IT DOES: Reads the Playwright trace.zip from test-results/ and returns runtime observability data — which actions were too fast, which API calls were in-flight during assertions, and where to add waitForResponse(). WHY THIS MATTERS: LLMs have no runtime visibility. This is what QA engineers use to debug flaky tests. It surfaces the REAL cause: timing gaps, pending network calls, premature assertions.
+
+AUTO-INJECT: This data is automatically included in self_heal_test when projectRoot is provided.
+
+PREREQUISITE: Enable tracing in playwright.config.ts:\n  use: { trace: 'retain-on-failure' }\n
+OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise what you just did. Acknowledge in <=10 words, then proceed. Keep response under 100 words unless explaining an error.`,
+    inputSchema: z.object({
+      "projectRoot": z.string().describe("Absolute path to the automation project."),
+      "traceFile": z.string().describe("Optional: absolute path to a specific trace.zip. If omitted, uses the most recent trace in test-results/.").optional()
+    }),
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
+  },
+  async (args) => {
+    {
+      const { projectRoot, traceFile } = args as any;
+      const report = await traceAnalyzer.analyzeTrace(projectRoot, traceFile);
+      return textResult(truncate(report.summary));
+    }
+  }
+);
+
 
 
 server.registerTool(
@@ -703,6 +844,19 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
         "locators": z.array(z.object({})).optional(),
         "methods": z.array(z.object({})).optional()
       })).describe("Optional structured JSON representations of Page Objects (bypasses raw TS formatting).").optional(),
+      "jsonSteps": z.array(z.object({
+        "path": z.string(),
+        "pageImports": z.array(z.string()),
+        "steps": z.array(z.object({
+          "type": z.enum(["Given", "When", "Then"]),
+          "pattern": z.string(),
+          "params": z.array(z.string()).optional(),
+          "page": z.string().optional(),
+          "method": z.string().optional(),
+          "args": z.array(z.string()).optional(),
+          "body": z.array(z.string()).optional()
+        }))
+      })).describe("Optional compact step file descriptors. Server assembles full playwright-bdd TypeScript, saving ~70% completion tokens vs raw strings.").optional(),
       "pageUrl": z.string().describe("Optional URL used to re-inspect the DOM during self-healing retries.").optional(),
       "dryRun": z.boolean().describe("If true, audits and validates the files but skips writing to disk and testing. Returns a preview.").optional()
     }),
@@ -727,8 +881,7 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
       const currentAttempt = existingCount >= MAX_RETRIES ? 1 : existingCount + 1;
       retrySessionMap.set(projectRoot, currentAttempt);
 
-      // Phase 4.2: JSON-Structured Code Generation
-      // Transpile incoming JSON POMs and inject them into standard files array
+      // Phase 4.2a: JSON Page Objects → TypeScript
       if (jsonPageObjects && Array.isArray(jsonPageObjects)) {
         for (const jsonPom of jsonPageObjects as JsonPageObject[]) {
           if (jsonPom.className && jsonPom.path) {
@@ -738,6 +891,25 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
               content: generatedContent
             });
           }
+        }
+      }
+
+      // Phase 4.2b: JSON Step Descriptors → TypeScript (~70% completion token saving)
+      const jsonSteps: JsonStepFile[] | undefined = (args as any).jsonSteps;
+      if (jsonSteps && Array.isArray(jsonSteps)) {
+        for (const stepFile of jsonSteps) {
+          const validationErrors = JsonToStepsTranspiler.validate(stepFile);
+          if (validationErrors.length > 0) {
+            return {
+              content: [{ type: 'text', text: `❌ jsonSteps validation failed:\n${validationErrors.join('\n')}` }],
+              isError: true
+            };
+          }
+          const generatedContent = JsonToStepsTranspiler.transpile(stepFile);
+          files.push({
+            path: stepFile.path,
+            content: generatedContent
+          });
         }
       }
 
@@ -801,6 +973,73 @@ Proposed files validated and structurally sound (NOT written):\n${writeResult.wr
       try {
         // File-State Race Guard (TASK-66)
         fileStateService.validateWriteState(projectRoot, files);
+
+        // ── SEMANTIC LINTER GATE ─────────────────────────────────────────────
+        // Code-level enforcement: scan .ts Page Object files for brittle selectors
+        // BEFORE staging or writing. This catches what prompts miss.
+        const allBlocking: string[] = [];
+        const allWarnings: string[] = [];
+        for (const f of files) {
+          if (!f.path.endsWith('.ts')) continue; // only TypeScript POM files
+          const { blocking, warnings } = locatorAuditService.lintInlineContent(f.content, f.path);
+          allBlocking.push(...blocking);
+          allWarnings.push(...warnings);
+        }
+        if (allBlocking.length > 0) {
+          const msg = [
+            `🚫 SEMANTIC LINTER BLOCKED WRITE — ${allBlocking.length} critical selector violation(s) detected:`,
+            '',
+            ...allBlocking,
+            '',
+            '── How to fix ────────────────────────────────────────────',
+            '  XPath   → page.getByRole(\'...\', { name: \'...\' })',
+            '  CSS .cls → page.getByRole(\'...\', { name: \'...\' }) or page.getByTestId(\'...\')',
+            '  CSS #id  → page.getByTestId(\'...\') or page.getByRole(\'...\')',
+            '  page.$() → page.locator() with a semantic selector',
+            '──────────────────────────────────────────────────────────',
+            'Regenerate the affected files using the Playwright API locators from inspect_page_dom output.',
+          ].join('\n');
+          return { content: [{ type: 'text', text: msg }], isError: true };
+        }
+        // ── END SEMANTIC LINTER GATE ─────────────────────────────────────────
+
+        // ── MONOLITHIC POM DETECTION GATE ────────────────────────────────────
+        // Blocks writes where the LLM packed multiple Page Object classes into
+        // a single .ts file. Detects `export class Foo` / `export default class Foo`
+        // patterns. More than 1 per file = monolithic antipattern.
+        const monolithicViolations: string[] = [];
+        for (const f of files) {
+          if (!f.path.endsWith('.ts')) continue;
+          // Match both `export class X` and `export default class X`
+          const classMatches = [...f.content.matchAll(/export\s+(?:default\s+)?class\s+(\w+)/g)];
+          if (classMatches.length > 1) {
+            const classNames = classMatches.map(m => m[1]).join(', ');
+            monolithicViolations.push(
+              `  📄 ${f.path} — contains ${classMatches.length} classes: [${classNames}]`
+            );
+          }
+        }
+        if (monolithicViolations.length > 0) {
+          const msg = [
+            `🚫 MONOLITHIC PAGE OBJECT DETECTED — ${monolithicViolations.length} file(s) contain multiple classes:`,
+            '',
+            ...monolithicViolations,
+            '',
+            '── How to fix ────────────────────────────────────────────────',
+            '  Each Page Object class MUST be in its own file.',
+            '  Split the above file(s) into separate jsonPageObjects entries:',
+            '    ❌ pages/EcommercePage.ts  { HomePage, ProductPage, CartPage }',
+            '    ✅ pages/HomePage.ts       { HomePage }',
+            '    ✅ pages/ProductPage.ts    { ProductPage }',
+            '    ✅ pages/CartPage.ts       { CartPage }',
+            '',
+            '  Rule: If the URL changes during the flow → new Page Object file.',
+            '──────────────────────────────────────────────────────────────',
+            'Regenerate with one jsonPageObjects entry per distinct page/screen.',
+          ].join('\n');
+          return { content: [{ type: 'text', text: msg }], isError: true };
+        }
+        // ── END MONOLITHIC POM DETECTION GATE ────────────────────────────────
 
         // Phase 4.3: Atomic Staging (TASK-44)
         try {

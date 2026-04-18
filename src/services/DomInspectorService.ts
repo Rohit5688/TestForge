@@ -4,9 +4,18 @@ import type { IDomInspector, LoginMacro } from '../interfaces/IDomInspector.js';
 import { ScreenshotStorage } from '../utils/ScreenshotStorage.js';
 import { SmartDomExtractor } from '../utils/SmartDomExtractor.js';
 
+export type DomReturnFormat = 'markdown' | 'json';
+
 export class DomInspectorService implements IDomInspector {
 
-  public async inspect(url: string, waitForSelector?: string, storageState?: string, includeIframes?: boolean, loginMacro?: LoginMacro, timeoutMs: number = 30000, enableVisualMode: boolean = false): Promise<string> {
+  /**
+   * Inspect a page's accessibility tree.
+   *
+   * @param returnFormat  'markdown' (default) — pruned Actionable Markdown for LLM prompts.
+   *                      'json' — flat JsonElement[] array (locator + selectorArgs) for
+   *                               custom-wrapper-aware POM generators.
+   */
+  public async inspect(url: string, waitForSelector?: string, storageState?: string, includeIframes?: boolean, loginMacro?: LoginMacro, timeoutMs: number = 30000, enableVisualMode: boolean = false, returnFormat: DomReturnFormat = 'markdown'): Promise<string> {
     let browser: Browser | null = null;
     try {
       browser = await chromium.launch({ headless: true });
@@ -98,6 +107,11 @@ export class DomInspectorService implements IDomInspector {
       }
 
       const rawJson = JSON.stringify(result, null, 2);
+      // Branch on returnFormat: 'json' → flat JsonElement[] (custom-wrapper friendly)
+      //                          'markdown' (default) → pruned Actionable Markdown
+      if (returnFormat === 'json') {
+        return SmartDomExtractor.extractAsJson(rawJson, url);
+      }
       // TASK-62: transform raw AOM JSON → pruned Actionable Markdown
       return SmartDomExtractor.extract(rawJson, url, screenshotPath);
 

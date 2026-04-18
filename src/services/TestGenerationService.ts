@@ -9,16 +9,18 @@ import { ExtensionLoader } from '../utils/ExtensionLoader.js';
 const MAX_GHERKIN_SCREENS = 3;
 
 export class TestGenerationService implements ITestGenerator {
-  
+
   public async generatePromptInstruction(
     testDescription: string,
     projectRoot: string,
     analysisResult: CodebaseAnalysisResult,
     customWrapperPackage?: string,
     baseUrl?: string,
-    memoryPrompt: string = ""
+    memoryPrompt: string = "",
+    domJsonContext?: string,   // Optional: JSON string of JsonElement[] from inspect_page_dom(returnFormat:'json')
+    testContext?: import('../types/TestContext.js').TestContext, // Pre-gathered verified DOM + network context
   ): Promise<string> {
-    
+
     memoryPrompt += ExtensionLoader.loadExtensionsForPrompt(projectRoot);
 
     // --- Phase 23: Extract team preferences from mcp-config.json if present ---
@@ -50,10 +52,10 @@ export class TestGenerationService implements ITestGenerator {
     const userRoles = analysisResult.userRoles;
     const userContext = (authStrategy === 'users-json' && userRoles && userRoles.roles.length > 0)
       ? `\n--- Multi-User Credential Store (users-json strategy, env: ${userRoles.environment}) ---\n` +
-        `Available roles: ${userRoles.roles.join(', ')}\n` +
-        `Helper import: ${userRoles.helperImport}\n` +
-        `Usage in Page Object methods: const { username, password } = getUser('<role>');\n` +
-        `NEVER use process.env.USERNAME or process.env.PASSWORD — always use getUser() instead.`
+      `Available roles: ${userRoles.roles.join(', ')}\n` +
+      `Helper import: ${userRoles.helperImport}\n` +
+      `Usage in Page Object methods: const { username, password } = getUser('<role>');\n` +
+      `NEVER use process.env.USERNAME or process.env.PASSWORD — always use getUser() instead.`
       : '';
 
     // --- Token efficiency: relevance filter to reduce context bloat on mature projects ---
@@ -103,13 +105,13 @@ export class TestGenerationService implements ITestGenerator {
       archNotes ? `\n--- ARCHITECTURE NOTES (Item 11: FOLLOW THESE) ---\n${archNotes}` : ''
     ];
 
-    const envStrategyRule = analysisResult.envConfig?.present 
-       ? "Assume the project uses a `.env` file (e.g., `process.env.BASE_URL`). Use Playwright's `baseURL` config or `dotenv` rather than hardcoding."
-       : "Assume the project manages configuration dynamically (e.g., via a `config/` directory, custom module, or Playwright projects). Infer the config import from context and use IT rather than hardcoding.";
+    const envStrategyRule = analysisResult.envConfig?.present
+      ? "Assume the project uses a `.env` file (e.g., `process.env.BASE_URL`). Use Playwright's `baseURL` config or `dotenv` rather than hardcoding."
+      : "Assume the project manages configuration dynamically (e.g., via a `config/` directory, custom module, or Playwright projects). Infer the config import from context and use IT rather than hardcoding.";
 
     const dotenvImportRule = analysisResult.envConfig?.present
-       ? "14. Environment Variables: Every generated Page Object file MUST start with `import 'dotenv/config';` as the very first line, so `process.env.*` values from `.env` are available at runtime."
-       : "14. Environment Variables: Do NOT inject `import 'dotenv/config';`. Use the project's native configuration strategy as inferred from existing Page Objects or Utility helpers.";
+      ? "14. Environment Variables: Every generated Page Object file MUST start with `import 'dotenv/config';` as the very first line, so `process.env.*` values from `.env` are available at runtime."
+      : "14. Environment Variables: Do NOT inject `import 'dotenv/config';`. Use the project's native configuration strategy as inferred from existing Page Objects or Utility helpers.";
 
     // Detect if BasePage exists in the project
     const hasBasePage = analysisResult.existingPageObjects.some(
@@ -117,8 +119,74 @@ export class TestGenerationService implements ITestGenerator {
     );
 
     const basePageRule = hasBasePage
-      ? `6. **Page Class Extension**: A \`BasePage\` class IS detected in this project. ALL new Page Objects MUST extend \`BasePage\` by importing from the correct relative path. Inherit and reuse its \`navigate()\`, \`waitForStable()\`, \`checkAccessibility()\` methods.`
-      : `6. **Page Class Extension**: No \`BasePage\` is detected in this project. Do NOT attempt to extend or import \`BasePage\`. Export a plain class with a \`constructor(protected page: Page) {}\` signature and self-contained Playwright API calls.`;
+      ? `6. **Page Class Extension (MANDATORY)**: \`BasePage\` IS detected. ALL Page Objects MUST extend it (\`class LoginPage extends BasePage\`). 
+
+   ⚡ **TOKEN-EFFICIENT ACTION PATTERN** (use these instead of \`this.page.*\` directly):
+   - \`await this.click(this.submitBtn)\`      ← NOT \`await this.submitBtn.click()\`
+   - \`await this.fill(this.emailInput, val)\`  ← NOT \`await this.emailInput.fill(val)\`
+   - \`await this.hover(this.menuItem)\`        ← NOT \`await this.menuItem.hover()\`
+   - \`await this.selectOption(this.dropdown, label)\` ← NOT \`await this.dropdown.selectOption()\`
+   - \`await this.goto(url)\`                  ← NOT \`await this.page.goto(url)\`
+   - \`await this.waitForResponse('/api/x')\`  ← NOT \`await this.page.waitForResponse(...)\`
+   - \`await this.expectVisible(this.header)\` ← NOT \`await expect(this.header).toBeVisible()\`
+   - \`await this.waitForStable()\`            ← NOT \`await this.page.waitForLoadState(...)\`
+
+   Direct \`this.page.*\` calls are ONLY allowed for: \`this.page.getByRole()\`, \`this.page.getByTestId()\`, \`this.page.context()\`, \`this.page.route()\`, \`this.page.waitForResponse()\` (inside \`Promise.all\`), multi-tab handling.`
+      : `6. **Page Class Extension**: No \`BasePage\` detected. Export a plain class with \`constructor(protected readonly page: Page) {}\`. All Playwright calls go through \`this.page.*\` directly.`;
+
+    // ── DOM JSON CONTEXT BLOCK ──────────────────────────────────────────────
+    // When inspect_page_dom was called with returnFormat:'json', the caller may
+    // pass the structured element list here. This gives the LLM explicit field
+    // references instead of requiring it to parse prose Markdown.
+    let locatorSourceSection = '';
+    if (domJsonContext) {
+      let elements: Array<{ id: number; role: string; text?: string; locator: string; selectorArgs?: Record<string, string> }> = [];
+      try { elements = JSON.parse(domJsonContext); } catch { /* malformed — ignore */ }
+      if (elements.length > 0) {
+        locatorSourceSection = `
+--- DOM ELEMENT REFERENCE (from inspect_page_dom) ---
+The following ${elements.length} actionable element(s) were captured from the live page.
+Each entry has an \`id\`, \`role\`, optional \`text\`, and a \`locator\` that is a
+ready-to-use Playwright API string. Copy \`locator\` EXACTLY into your Page Object.
+Do NOT paraphrase, css-ify, or re-derive these selectors.
+
+${JSON.stringify(elements, null, 2)}
+
+RULES for using the above:
+  • Copy \`element.locator\` verbatim as a private property:  private btnX = ${elements[0]?.locator ?? 'page.getByRole(...)'}
+  • Do NOT wrap in page.locator() — these are already fully-formed API calls.
+  • If selectorArgs are present and a custom wrapper is in use, call the wrapper method instead (see CUSTOM WRAPPER SELECTOR RULES below if present).
+--- END DOM ELEMENT REFERENCE ---
+`;
+      }
+    }
+    // ── END DOM JSON CONTEXT BLOCK ──────────────────────────────────────────
+
+    // --- VERIFIED DOM CONTEXT (from gather_test_context) ---
+    if (testContext && testContext.version === '1' && testContext.pages.length > 0) {
+      const pageBlocks = testContext.pages.map(p => {
+        const elemLines = p.elements.map(e => {
+          const typeHint = e.inputType ? ` (${e.inputType})` : '';
+          return `  - ${e.role} "${e.name}": ${e.locator}${typeHint}`;
+        }).join('\n');
+        const netLines = p.networkOnLoad.length > 0
+          ? p.networkOnLoad.map(n => `  - ${n.method} ${n.urlPath} → ${n.status}`).join('\n')
+          : '  (none)';
+        return `Page: ${p.title} (${p.resolvedUrl})\nActionable elements:\n${elemLines}\nNetwork calls on load:\n${netLines}`;
+      }).join('\n\n');
+
+      memoryPrompt += `\n\n## ✅ VERIFIED DOM DATA (gathered ${testContext.gatheredAt})\n` +
+        `You MUST use these exact Playwright locators — do not guess or invent selectors.\n` +
+        `For network calls, use waitForResponse(r => r.url().includes('PATH') && r.status() === STATUS) \n` +
+        `before the action that triggers it. Do NOT use waitForLoadState('networkidle').\n\n` +
+        pageBlocks;
+    } else if (!testContext && !domJsonContext) {
+      memoryPrompt += `\n\n## ⚠️ DOM CONTEXT MISSING — MANDATORY PRE-FLIGHT REQUIRED\n` +
+        `You do NOT have verified DOM data. BEFORE calling validate_and_write, call gather_test_context with:\n` +
+        `  baseUrl: "${baseUrl ?? '<the app base URL>'}"\n` +
+        `  paths: [<relative paths this test visits, e.g. "/login", "/dashboard">]\n` +
+        `Pass the returned JSON as testContext to generate_gherkin_pom_test_suite before generating code.`;
+    }
 
     let instructContent = `[SYSTEM INSTRUCTION: MCP TEST GENERATION]
 You are a highly capable QA automation engineer.
@@ -141,7 +209,7 @@ ${analysisResult.existingTestData ? [...analysisResult.existingTestData.payloads
 
 --- MANDATORY REQUIREMENTS (SOLID & BDD PATTERNS) ---
 1. You MUST output a structured JSON response EXACTLY matching the formatting requested below. Do NOT wrap the JSON in markdown code blocks, or if you do, ensure the JSON is perfectly valid.
-2. Step definitions MUST NEVER contain raw Playwright calls (e.g., page.locator). They must strictly call Page Object Model methods.
+2. Step definitions MUST NEVER contain raw Playwright calls (e.g., page.locator). They must strictly call Page Object Model methods. Page Object locators MUST be Playwright API strings: page.getByRole(), page.getByTestId(), page.getByLabel(), page.getByText(), page.getByPlaceholder(). NEVER use XPath (page.locator('//...')) or CSS class selectors (page.locator('.btn')).
 3. Reuse existing POM methods from the context above whenever possible. Avoid duplicating existing logic.
 4. Semantic Step Matching & Fuzzy Adaptation: If your intent is semantically similar to an "Existing Step Pattern" listed above (e.g. "I press login" vs "I click login button"), you MUST REWRITE your requested step in the \`.feature\` file to exactly match the existing step definition. Do NOT create a duplicate step definition.
 5. Environments & URLs: Do NOT hardcode sensitive URLs or credentials in your steps. ${envStrategyRule}
@@ -149,7 +217,7 @@ ${basePageRule}
 7. Asynchronous Auto-Waiting: Unless handled by a Custom Wrapper, Page Object methods MUST use Playwright's web-first assertions (e.g. \`await expect(this.btn).toBeVisible()\`) to prevent race conditions during page transitions.
 8. Data-Driven Testing: Default to generating Gherkin \`Scenario Outline:\` with an \`Examples:\` data table when dealing with user inputs, rather than hardcoding static data inside the steps.
 9. Strict Assertions: Every \`Then\` step MUST contain at least one valid assertion (via wrapper or Playwright \`expect\`) verifying a visible DOM state. URL assertions alone are insufficient.
-10. Page Transitions & Navigation: If a method triggers a page transition, it MUST end by explicitly waiting for the new page to stabilize (e.g., \`await this.page.waitForLoadState('domcontentloaded')\` or asserting a unique element on the *following* page).
+10. Page Transitions & Navigation: If a method triggers a page transition, it MUST end by calling \`await this.waitForStable()\` (BasePage helper) OR asserting a unique element on the following page. Do NOT call \`this.page.waitForLoadState()\` directly in Page Objects that extend BasePage.
 11. Complex Interactions (Mouse/Keyboard): For actions like drag-and-drop or hover, use Playwright's native APIs (e.g., \`await this.page.dragAndDrop()\`) UNLESS the Custom Wrapper provides an abstraction for it. NEVER use raw \`page.evaluate()\` unless natively unsupported.
 12. Background Steps: If ${bgThreshold} or more Scenarios in a feature share the same first \`Given\` step (e.g., navigation to a URL or login), extract it into a Gherkin \`Background:\` block. Never repeat the same step in every scenario when a Background can be used.
 13. Test Tags: Every \`Scenario\` or \`Scenario Outline\` MUST be tagged with at least one of: ${allowedTags.map(t => `\`${t}\``).join(', ')}. Use this logic:
@@ -158,7 +226,7 @@ ${basePageRule}
     - Full end-to-end user journeys = last tag in the list
     Tags must appear on the line directly above \`Scenario:\` or \`Scenario Outline:\`.
 ${dotenvImportRule}
-15. Page Load Waits: After any navigation, use \`await this.page.waitForLoadState('${waitStrategy}')\` as the standard wait strategy for this project.
+15. Page Load Waits: After any navigation, call \`await this.waitForStable()\` (if extending BasePage) or \`await this.page.waitForLoadState('${waitStrategy}')\`. NEVER use \`waitForLoadState('networkidle')\` — modern SPAs are chatty by design and this will time out.
 16. Multi-Tab Interactions: If an action opens a new browser tab, you MUST use \`const [newPage] = await Promise.all([this.page.context().waitForEvent('page'), <action>])\`. Pass this \`newPage\` to subsequent Page Objects instead of the original page. To return to the main window, use \`await this.page.bringToFront()\` and resume using the original page object.
 17. API Interception & Capturing: For mocking APIs, use \`await this.page.route('**/endpoint', ...)\` BEFORE the action. For capturing API responses, use \`const [response] = await Promise.all([this.page.waitForResponse('**/api/*'), actionThatTriggersIt()]);\` to prevent race conditions. Share captured data across steps using module-level variables.
 18. Mid-Test HTTP & Auth: For pure API calls, extract the \`request\` fixture (\`async ({ page, request }) => {...}\`).
@@ -175,8 +243,17 @@ ${dotenvImportRule}
 27. Automated Accessibility: If the user description mentions "accessibility", "WCAG", "a11y", or "compliance", include a \`Then I check accessibility of the page\` step that maps to \`await pageObject.checkAccessibility()\`.
 28. TSConfig Autowiring: If your implementation creates a NEW top-level architectural directory (e.g., \`models/\`, \`types/\`, \`helpers/\`), you MUST update \`tsconfig.json\` to add the corresponding path alias.
 29. **[PHASE 4: STATE-MACHINE MICRO-PROMPTING]**: If this request requires generating a very large Page Object AND complex step definitions simultaneously, serialize your work. Generate and invoke \`validate_and_write\` for ONLY the \`jsonPageObjects\` first. Wait for compilation success before generating the \`.feature\` and \`.steps.ts\` files.
+31. **[COMPLETION TOKEN BUDGET — STRICT]**: Every token in your response is billable.
+    - ❌ NEVER add inline comments to generated code: \`// Wait for element\`, \`// Click button\`, \`// Navigate to page\`
+    - ❌ NEVER add JSDoc blocks to generated methods
+    - ❌ NEVER explain what a line does in a comment — the method name is the documentation
+    - ✅ Use \`jsonSteps\` instead of writing raw TypeScript in \`files[]\` for step definitions (saves ~70% output tokens)
+    - ✅ Use \`jsonPageObjects\` for ALL Page Objects (already required by Rule 30)
+    - ✅ The \`explanation\` field is the ONLY place for natural language — keep it to 1-2 sentences
 
 ${memoryPrompt}
+
+${locatorSourceSection}
 
 --- PLAYWRIGHT-BDD SPECIFIC RULES ---
 - Step definitions MUST be defined using \`playwright-bdd\`, not standard Cucumber:
@@ -190,38 +267,82 @@ ${memoryPrompt}
 - Do NOT import from \`@cucumber/cucumber\`.
 - In your explanation string, remind the user that they must run \`npm test\` to generate the test files and execute them.
 
+30. **[CRITICAL: ONE CLASS PER FILE — NEVER MONOLITHIC]**: You MUST generate a SEPARATE \`jsonPageObjects\` entry for EACH distinct page or screen in the test flow. NEVER combine multiple pages into a single Page Object class or a single file.
+    - ❌ WRONG: One \`EcommercePage\` class with methods for Home, Product, Cart, Checkout
+    - ✅ CORRECT: \`HomePage\`, \`ProductPage\`, \`CartPage\`, \`CheckoutPage\` — each a separate entry in \`jsonPageObjects\` with its own \`path\`
+    - Rule of thumb: if the URL changes during the flow, a new Page Object is required.
+    - Similarly, step definitions SHOULD be split per feature file — one \`.steps.ts\` per \`.feature\` file.
+
 --- OUTPUT SCHEMA ---
-Your entire response must be a single JSON object with this shape. DO NOT write raw TypeScript strings for Page Objects. You MUST output Page Objects exclusively in the \`jsonPageObjects\` array to avoid syntactical/formatting hallucinations. The MCP server will generate the TypeScript files for you.
+Your entire response must be a single JSON object. DO NOT write raw TypeScript for Page Objects or step definitions.
+- Page Objects → ALWAYS use \`jsonPageObjects\` (server generates TypeScript, no hallucination risk)
+- Step Definitions → PREFER \`jsonSteps\` for all standard steps (server generates boilerplate, ~70% fewer completion tokens)
+  Use \`files[]\` for step definitions ONLY when a step has complex multi-page logic that cannot fit jsonSteps shape.
+- Feature files → ALWAYS use \`files[]\` (Gherkin has no boilerplate to strip)
+- Zero inline comments in any generated code (Rule 31)
+
+IMPORTANT: If the test flow visits N distinct pages/screens, the \`jsonPageObjects\` array MUST have N entries — one per page. See the multi-page example below:
 {
   "files": [
     {
-      "path": "features/new-feature.feature",
+      "path": "features/checkout.feature",
       "content": "Feature: ...\\n"
     },
-    {
-      "path": "step-definitions/new-steps.ts",
-      "content": "import { createBdd } from 'playwright-bdd';...\\n"
-    }
   ],
   "jsonPageObjects": [
     {
-      "className": "NewPage",
-      "path": "pages/NewPage.ts",
+      "className": "HomePage",
+      "path": "pages/HomePage.ts",
       "extendsClass": ${hasBasePage ? '"BasePage"' : 'null'},
       "imports": [${hasBasePage ? '"import { BasePage } from \'./BasePage\';"' : '"import { Page } from \'@playwright/test\';"'}],
       "locators": [
-         { "name": "submitBtn", "selector": "#submit" }
+         { "name": "searchInput", "selector": "page.getByRole('searchbox', { name: 'Search' })" }
       ],
       "methods": [
-         { "name": "submit", "args": [], "body": ["await this.submitBtn.click();"] }
+         { "name": "search", "args": ["term: string"], "body": ["await this.fill(this.searchInput, term);", "await this.searchInput.press('Enter');"] }
+      ]
+    },
+    {
+      "className": "ProductPage",
+      "path": "pages/ProductPage.ts",
+      "extendsClass": ${hasBasePage ? '"BasePage"' : 'null'},
+      "imports": [${hasBasePage ? '"import { BasePage } from \'./BasePage\';"' : '"import { Page } from \'@playwright/test\';"'}],
+      "locators": [
+         { "name": "addToCartBtn", "selector": "page.getByRole('button', { name: 'Add to Cart' })" }
+      ],
+      "methods": [
+         { "name": "addToCart", "args": [], "body": ["await this.click(this.addToCartBtn);"] }
+      ]
+    },
+    {
+      "className": "CartPage",
+      "path": "pages/CartPage.ts",
+      "extendsClass": ${hasBasePage ? '"BasePage"' : 'null'},
+      "imports": [${hasBasePage ? '"import { BasePage } from \'./BasePage\';"' : '"import { Page } from \'@playwright/test\';"'}],
+      "locators": [
+         { "name": "checkoutBtn", "selector": "page.getByRole('button', { name: 'Checkout' })" }
+      ],
+      "methods": [
+         { "name": "proceedToCheckout", "args": [], "body": ["await this.click(this.checkoutBtn);", "await this.waitForStable();"] }
       ]
     }
   ],
   "setupRequired": ${!analysisResult.bddSetup.present},
-  "reusedComponents": [
-    // List string descriptions of what you decided to reuse
+  "jsonSteps": [
+    {
+      "path": "step-definitions/checkout.steps.ts",
+      "pageImports": ["HomePage", "ProductPage", "CartPage"],
+      "steps": [
+        { "type": "Given", "pattern": "I am on the home page", "page": "HomePage", "method": "navigate", "args": ["process.env['BASE_URL'] ?? ''"] },
+        { "type": "When",  "pattern": "I search for {string}", "params": ["term: string"], "page": "HomePage", "method": "search", "args": ["term"] },
+        { "type": "When",  "pattern": "I add the product to the cart", "page": "ProductPage", "method": "addToCart", "args": [] },
+        { "type": "Then",  "pattern": "I should see the order summary",
+          "body": ["await expect(page.getByRole('heading', { name: 'Order Summary' })).toBeVisible();"] }
+      ]
+    }
   ],
-  "explanation": "Brief explanation of the generated structure."
+  "reusedComponents": [],
+  "explanation": "1-2 sentence summary only."
 }
 `;
 

@@ -175,6 +175,152 @@ export class LocatorAuditService {
     return { file, className, locatorName, strategy, selector, severity, recommendation };
   }
 
+  /**
+   * Inline semantic linter — runs on raw TypeScript string content (no file I/O).
+   * Called by validate_and_write before writing each .ts Page Object file.
+   *
+   * This is code-level enforcement, not a prompt instruction. Unlike hints to LLMs
+   * (which get ignored), this function blocks the write when critical violations exist.
+   *
+   * Returns:
+   *  { blocking: string[], warnings: string[] }
+   *  blocking — critical violations that MUST be fixed before writing (XPath, page.$, raw CSS XPath)
+   *  warnings — fragile selectors that are flagged but don't block the write
+   */
+  public lintInlineContent(content: string, filePath: string): {
+    blocking: string[];
+    warnings: string[];
+  } {
+    const blocking: string[] = [];
+    const warnings: string[] = [];
+
+    // ── BLOCKING: XPath selectors in locator() calls ─────────────────────────
+    // page.locator('//button') or this.page.locator('//input') → always brittle
+    const xpathLocatorRe = /(?:this\.)?page\.locator\(\s*['"`]((?:\/\/|\(\/\/)[\s\S]*?)['"`]\s*\)/g;
+    for (const m of content.matchAll(xpathLocatorRe)) {
+      blocking.push(
+        `🔴 XPath in locator(): \`${m[1]?.slice(0, 60)}\`\n` +
+        `   → Replace with: page.getByRole() / page.getByTestId() / page.getByLabel()\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    // ── BLOCKING: Legacy page.$() ─────────────────────────────────────────────
+    const dollarRe = /(?:this\.)?page\.\$\(\s*['"`].+?['"`]\s*\)/g;
+    for (const m of content.matchAll(dollarRe)) {
+      blocking.push(
+        `🔴 Legacy page.\$(): \`${m[0]?.slice(0, 60)}\`\n` +
+        `   → page.\$() is deprecated. Use page.locator() with a semantic selector.\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    // ── BLOCKING: CSS-only class/id selectors in locator() ───────────────────
+    // page.locator('.btn-primary') or page.locator('#submit') → impl-specific
+    const cssLocatorRe = /(?:this\.)?page\.locator\(\s*['"`]([.#][^'"`\s]+)['"`]\s*\)/g;
+    for (const m of content.matchAll(cssLocatorRe)) {
+      const sel = m[1] ?? '';
+      // Skip Playwright-blessed attribute selectors like [data-testid=...]
+      if (sel.startsWith('[data-') || sel.startsWith('[aria-')) continue;
+      blocking.push(
+        `🔴 CSS ${sel.startsWith('.') ? 'class' : 'id'} selector in locator(): \`${sel}\`\n` +
+        `   → This is implementation-specific and breaks on UI refactors.\n` +
+        `   Replace with: page.getByRole('...', { name: '...' }) or page.getByTestId('...')\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    // ── WARNINGS: page.locator() with non-semantic strings (not already blocked) ──
+    const genericLocatorRe = /(?:this\.)?page\.locator\(\s*['"`]([^'"`]+)['"`]\s*\)/g;
+    for (const m of content.matchAll(genericLocatorRe)) {
+      const sel = m[1] ?? '';
+      // Skip already-blocked patterns and known-good patterns
+      if (sel.startsWith('//') || sel.startsWith('(//')) continue;
+      if (sel.startsWith('.') || sel.startsWith('#')) continue;
+      if (sel.startsWith('[data-testid') || sel.startsWith('[aria-') || sel.startsWith('role=')) continue;
+      if (sel.startsWith('text=') || sel.startsWith('has-text=')) continue;
+      warnings.push(
+        `🟡 page.locator() with non-semantic selector: \`${sel.slice(0, 60)}\`\n` +
+        `   → Consider replacing with page.getByRole/getByLabel/getByText for resilience.\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    // ── BLOCKING: JS evaluate click bypass ───────────────────────────────────
+    // page.evaluate(() => document.querySelector('button').click())
+    // page.evaluate(el => el.click(), handle)
+    // This bypasses browser event model — no hover, no focus, no accessibility checks.
+    // A real user NEVER does this. Non-human actions cause flaky tests on real apps.
+    const jsEvalClickRe = /page\.evaluate\s*\([^)]*\.click\s*\(\)/g;
+    for (const m of content.matchAll(jsEvalClickRe)) {
+      blocking.push(
+        `🔴 JS evaluate click bypass: \`${m[0]?.slice(0, 80)}\`\n` +
+        `   → This skips browser event handling (hover, focus, accessibility).\n` +
+        `   → Real users don't do this. Use: await element.click() with proper waits.\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    // ── BLOCKING: click({ force: true }) ─────────────────────────────────────
+    // Forces click on hidden/disabled elements — bypasses Playwright's auto-wait.
+    // This masks real synchronization bugs instead of fixing them.
+    const forceClickRe = /\.click\s*\(\s*\{[^}]*force\s*:\s*true[^}]*\}/g;
+    for (const m of content.matchAll(forceClickRe)) {
+      blocking.push(
+        `🔴 click({ force: true }): \`${m[0]?.slice(0, 80)}\`\n` +
+        `   → force:true bypasses visibility/interactability checks. This hides sync bugs.\n` +
+        `   → Fix the underlying timing issue: await expect(el).toBeVisible() first,\n` +
+        `     or use waitForResponse() if a network call precedes this element appearing.\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    // ── BLOCKING: dispatchEvent click synthesis ───────────────────────────────
+    // element.dispatchEvent(new MouseEvent('click')) — synthetic event, not real user action
+    const dispatchClickRe = /dispatchEvent\s*\(\s*new\s+(?:Mouse|Pointer|Click)Event/g;
+    for (const m of content.matchAll(dispatchClickRe)) {
+      blocking.push(
+        `🔴 Synthetic click event: \`${m[0]?.slice(0, 80)}\`\n` +
+        `   → dispatchEvent bypasses the browser's real event pipeline.\n` +
+        `   → Use: await element.click() — Playwright handles scrolling into view and waits.\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    // ── BLOCKING: hardcoded waitForTimeout (sleep) ────────────────────────────
+    // page.waitForTimeout(3000) — a hardcoded sleep. Always wrong in automation.
+    // Fast on dev machine, timeouts on CI. Never the correct fix.
+    const sleepRe = /(?:page|this\.page)\.waitForTimeout\s*\(\s*\d+\s*\)/g;
+    for (const m of content.matchAll(sleepRe)) {
+      blocking.push(
+        `🔴 Hardcoded sleep: \`${m[0]?.slice(0, 60)}\`\n` +
+        `   → waitForTimeout() is a flakiness time-bomb. Fast on dev, broken on CI.\n` +
+        `   → Replace with: await page.waitForResponse('**/api/endpoint')\n` +
+        `     or:           await expect(element).toBeVisible()\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    // ── WARNING: waitForLoadState('networkidle') ──────────────────────────────
+    // Unreliable on modern SPAs — React/Next/Vue apps have background websockets,
+    // analytics, polling. networkidle either waits forever or fires too early.
+    const networkIdleRe = /waitForLoadState\s*\(\s*['"`]networkidle['"`]/g;
+    for (const m of content.matchAll(networkIdleRe)) {
+      warnings.push(
+        `🟡 waitForLoadState('networkidle'): \`${m[0]?.slice(0, 60)}\`\n` +
+        `   → Modern SPAs never truly go idle (background polling, analytics, WS).\n` +
+        `   → Replace with a specific observable signal:\n` +
+        `     await page.waitForResponse('**/api/the-call-you-care-about')\n` +
+        `     await expect(page.getByRole('...')).toBeVisible()\n` +
+        `     await page.waitForLoadState('domcontentloaded')  (faster, more reliable)\n` +
+        `   File: ${filePath}`
+      );
+    }
+
+    return { blocking, warnings };
+  }
+
+
   private generateMarkdownReport(
     entries: LocatorAuditEntry[],
     stableCount: number,
