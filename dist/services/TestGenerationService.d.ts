@@ -1,7 +1,8 @@
 import type { ITestGenerator } from '../interfaces/ITestGenerator.js';
 import type { CodebaseAnalysisResult } from '../interfaces/ICodebaseAnalyzer.js';
 export declare class TestGenerationService implements ITestGenerator {
-    generatePromptInstruction(testDescription: string, projectRoot: string, analysisResult: CodebaseAnalysisResult, customWrapperPackage?: string, baseUrl?: string, memoryPrompt?: string): Promise<string>;
+    generatePromptInstruction(testDescription: string, projectRoot: string, analysisResult: CodebaseAnalysisResult, customWrapperPackage?: string, baseUrl?: string, memoryPrompt?: string, domJsonContext?: string, // Optional: JSON string of JsonElement[] from inspect_page_dom(returnFormat:'json')
+    testContext?: import('../types/TestContext.js').TestContext): Promise<string>;
     /**
      * TASK-34 — Gherkin Prompt Compression.
      * Reads all .feature files in the project, extracts Scenario/Scenario Outline
