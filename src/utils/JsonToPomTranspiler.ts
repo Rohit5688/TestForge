@@ -1,3 +1,5 @@
+import { lintPageObject } from './PageObjectLinter.js';
+
 export interface JsonPageObject {
   className: string;
   path: string;
@@ -72,6 +74,7 @@ export class JsonToPomTranspiler {
     }
 
     lines.push(`}`);
-    return lines.join('\n');
+    let code = lines.join('\n');
+    return lintPageObject(code, !!pom.extendsClass);
   }
 }

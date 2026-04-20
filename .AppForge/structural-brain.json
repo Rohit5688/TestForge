@@ -1,12 +1,7 @@
 {
   "project": "AppForge",
-  "analyzed_at": "2026-04-14T00:35:02",
+  "analyzed_at": "2026-04-19T12:45:25",
   "god_nodes": [
-    {
-      "id": "codebaseanalyzerservice_codebaseanalyzerservice",
-      "label": "CodebaseAnalyzerService",
-      "edges": 19
-    },
     {
       "id": "navigationgraphservice_navigationgraphservice",
       "label": "NavigationGraphService",
@@ -28,8 +23,18 @@
       "edges": 12
     },
     {
-      "id": "connection_mcpconnection",
-      "label": "MCPConnection",
+      "id": "traceanalyzerservice_traceanalyzerservice",
+      "label": "TraceAnalyzerService",
+      "edges": 12
+    },
+    {
+      "id": "contextmanager_contextmanager",
+      "label": "ContextManager",
+      "edges": 11
+    },
+    {
+      "id": "observabilityservice_observabilityservice",
+      "label": "ObservabilityService",
       "edges": 11
     },
     {
@@ -38,13 +43,8 @@
       "edges": 11
     },
     {
-      "id": "contextmanager_contextmanager",
-      "label": "ContextManager",
-      "edges": 10
-    },
-    {
-      "id": "observabilityservice_observabilityservice",
-      "label": "ObservabilityService",
+      "id": "codebaseanalyzerservice_codebaseanalyzerservice",
+      "label": "CodebaseAnalyzerService",
       "edges": 10
     },
     {
@@ -56,76 +56,13 @@
   "surprising_connections": [],
   "suggested_questions": [
     {
-      "type": "isolated_nodes",
-      "question": "What connects `Lightweight connection handling for MCP servers.`, `Base class for MCP server connections.`, `Create the connection context based on connection type.` to the rest of the system?",
-      "why": "21 weakly-connected nodes found - possible documentation gaps or missing edges."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `Community 0` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.1 - nodes in this community are weakly interconnected."
-    },
-    {
-      "type": "low_cohesion",
-      "question": "Should `Community 3` be split into smaller, more focused modules?",
-      "why": "Cohesion score 0.14 - nodes in this community are weakly interconnected."
+      "type": "no_signal",
+      "question": null,
+      "why": "Not enough signal to generate questions. This usually means the corpus has no AMBIGUOUS edges, no bridge nodes, no INFERRED relationships, and all communities are tightly cohesive. Add more files or run with --mode deep to extract richer edges."
     }
   ],
   "communities": {
     "0": [
-      "abc",
-      "connection",
-      "connection_create_connection",
-      "connection_create_context",
-      "connection_mcpconnection",
-      "connection_mcpconnection_aenter",
-      "connection_mcpconnection_aexit",
-      "connection_mcpconnection_call_tool",
-      "connection_mcpconnection_init",
-      "connection_mcpconnection_list_tools",
-      "connection_mcpconnectionhttp",
-      "connection_mcpconnectionhttp_create_context",
-      "connection_mcpconnectionhttp_init",
-      "connection_mcpconnectionsse",
-      "connection_mcpconnectionsse_create_context",
-      "connection_mcpconnectionsse_init",
-      "connection_mcpconnectionstdio",
-      "connection_mcpconnectionstdio_create_context",
-      "connection_mcpconnectionstdio_init",
-      "connection_rationale_1",
-      "connection_rationale_101",
-      "connection_rationale_120",
-      "connection_rationale_14",
-      "connection_rationale_25",
-      "connection_rationale_49",
-      "connection_rationale_56",
-      "connection_rationale_68",
-      "connection_rationale_74",
-      "connection_rationale_89"
-    ],
-    "1": [
-      "codebaseanalyzerservice",
-      "codebaseanalyzerservice_codebaseanalyzerservice",
-      "codebaseanalyzerservice_codebaseanalyzerservice_analyze",
-      "codebaseanalyzerservice_codebaseanalyzerservice_detectnamingconvention",
-      "codebaseanalyzerservice_codebaseanalyzerservice_directoryexists",
-      "codebaseanalyzerservice_codebaseanalyzerservice_extractpublicmethods",
-      "codebaseanalyzerservice_codebaseanalyzerservice_extractsamplestructure",
-      "codebaseanalyzerservice_codebaseanalyzerservice_extractsteps",
-      "codebaseanalyzerservice_codebaseanalyzerservice_fileexists",
-      "codebaseanalyzerservice_codebaseanalyzerservice_getwrapperversion",
-      "codebaseanalyzerservice_codebaseanalyzerservice_hasclasslocatorsfast",
-      "codebaseanalyzerservice_codebaseanalyzerservice_introspectwrapper",
-      "codebaseanalyzerservice_codebaseanalyzerservice_loadwrappercachefromfile",
-      "codebaseanalyzerservice_codebaseanalyzerservice_readallfiles",
-      "codebaseanalyzerservice_codebaseanalyzerservice_resolveandextractwrappermethods",
-      "codebaseanalyzerservice_codebaseanalyzerservice_resolvepackageroot",
-      "codebaseanalyzerservice_codebaseanalyzerservice_savewrappercachetofile",
-      "codebaseanalyzerservice_codebaseanalyzerservice_scanforduplicateplaywrightinstallations",
-      "codebaseanalyzerservice_codebaseanalyzerservice_scanwrapper",
-      "codebaseanalyzerservice_codebaseanalyzerservice_scanwrapperdir"
-    ],
-    "2": [
       "navigationgraphservice",
       "navigationgraphservice_navigationgraphservice",
       "navigationgraphservice_navigationgraphservice_addedge",
@@ -146,25 +83,7 @@
       "navigationgraphservice_navigationgraphservice_walkfiles",
       "navigationgraphservice_navigationgraphservice_writemd"
     ],
-    "3": [
-      "basepage",
-      "basepage_basepage",
-      "basepage_basepage_checkaccessibility",
-      "basepage_basepage_closepopups",
-      "basepage_basepage_constructor",
-      "basepage_basepage_highlightelement",
-      "basepage_basepage_navigate",
-      "basepage_basepage_waitforstable",
-      "jquerydatepickerpage",
-      "jquerydatepickerpage_jquerydatepickerpage",
-      "jquerydatepickerpage_jquerydatepickerpage_constructor",
-      "jquerydatepickerpage_jquerydatepickerpage_navigatetodatepicker",
-      "jquerydatepickerpage_jquerydatepickerpage_selectdate",
-      "jquerydatepickerpage_jquerydatepickerpage_selectdisplayinline",
-      "jquerydatepickerpage_jquerydatepickerpage_takescreenshot",
-      "jquerydatepickerpage_jquerydatepickerpage_verifydateselected"
-    ],
-    "4": [
+    "1": [
       "structuralbrainservice",
       "structuralbrainservice_structuralbrainservice",
       "structuralbrainservice_structuralbrainservice_brainfile",
@@ -181,23 +100,7 @@
       "structuralbrainservice_structuralbrainservice_savetodisk",
       "structuralbrainservice_structuralbrainservice_scanproject"
     ],
-    "5": [
-      "evaluation",
-      "evaluation_deterministicverifier",
-      "evaluation_deterministicverifier_get_call_error",
-      "evaluation_deterministicverifier_get_negative_args",
-      "evaluation_deterministicverifier_get_tool",
-      "evaluation_deterministicverifier_init",
-      "evaluation_deterministicverifier_initialize",
-      "evaluation_deterministicverifier_verify_task",
-      "evaluation_main",
-      "evaluation_parse_evaluation_file",
-      "evaluation_rationale_1",
-      "evaluation_rationale_265",
-      "evaluation_rationale_279",
-      "evaluation_rationale_29"
-    ],
-    "6": [
+    "2": [
       "environmentcheckservice",
       "environmentcheckservice_environmentcheckservice",
       "environmentcheckservice_environmentcheckservice_buildsummary",
@@ -212,7 +115,7 @@
       "environmentcheckservice_environmentcheckservice_checkplaywrightinstalled",
       "environmentcheckservice_environmentcheckservice_loadlocalenv"
     ],
-    "7": [
+    "3": [
       "preflightservice",
       "preflightservice_preflightservice",
       "preflightservice_preflightservice_buildreport",
@@ -227,7 +130,22 @@
       "preflightservice_preflightservice_loadlocalenv",
       "preflightservice_preflightservice_runchecks"
     ],
-    "8": [
+    "4": [
+      "traceanalyzerservice",
+      "traceanalyzerservice_traceanalyzerservice",
+      "traceanalyzerservice_traceanalyzerservice_analyzetrace",
+      "traceanalyzerservice_traceanalyzerservice_buildreport",
+      "traceanalyzerservice_traceanalyzerservice_buildsummary",
+      "traceanalyzerservice_traceanalyzerservice_checktraceconfig",
+      "traceanalyzerservice_traceanalyzerservice_emptyreport",
+      "traceanalyzerservice_traceanalyzerservice_extracttraceevents",
+      "traceanalyzerservice_traceanalyzerservice_extractwithsystemtool",
+      "traceanalyzerservice_traceanalyzerservice_findlatesttrace",
+      "traceanalyzerservice_traceanalyzerservice_findtracefile",
+      "traceanalyzerservice_traceanalyzerservice_findzipentries",
+      "traceanalyzerservice_traceanalyzerservice_readtracefromzip"
+    ],
+    "5": [
       "userstoreservice",
       "userstoreservice_detectapikeyfield",
       "userstoreservice_userstoreservice",
@@ -242,7 +160,35 @@
       "userstoreservice_userstoreservice_storefile",
       "userstoreservice_userstoreservice_updateexamplefile"
     ],
-    "9": [
+    "6": [
+      "contextmanager",
+      "contextmanager_contextmanager",
+      "contextmanager_contextmanager_countelements",
+      "contextmanager_contextmanager_extractkeyselectors",
+      "contextmanager_contextmanager_getcompactedhistory",
+      "contextmanager_contextmanager_getinstance",
+      "contextmanager_contextmanager_getlatesturl",
+      "contextmanager_contextmanager_getscancount",
+      "contextmanager_contextmanager_geturlcount",
+      "contextmanager_contextmanager_purgeoldcontext",
+      "contextmanager_contextmanager_recordscan",
+      "contextmanager_contextmanager_reset"
+    ],
+    "7": [
+      "observabilityservice",
+      "observabilityservice_observabilityservice",
+      "observabilityservice_observabilityservice_constructor",
+      "observabilityservice_observabilityservice_emit",
+      "observabilityservice_observabilityservice_ensureviewer",
+      "observabilityservice_observabilityservice_getinstance",
+      "observabilityservice_observabilityservice_getstream",
+      "observabilityservice_observabilityservice_sanitize",
+      "observabilityservice_observabilityservice_toolend",
+      "observabilityservice_observabilityservice_toolerror",
+      "observabilityservice_observabilityservice_toolstart",
+      "observabilityservice_observabilityservice_warning"
+    ],
+    "8": [
       "projectsetupservice",
       "projectsetupservice_projectsetupservice",
       "projectsetupservice_projectsetupservice_constructor",
@@ -256,33 +202,34 @@
       "projectsetupservice_projectsetupservice_syncconfigschema",
       "projectsetupservice_resolveexe"
     ],
+    "9": [
+      "smartdomextractor",
+      "smartdomextractor_captext",
+      "smartdomextractor_collectnodes",
+      "smartdomextractor_deriveselector",
+      "smartdomextractor_isdecorativecontainer",
+      "smartdomextractor_renderactionablemarkdown",
+      "smartdomextractor_smartdomextractor",
+      "smartdomextractor_smartdomextractor_extract",
+      "smartdomextractor_smartdomextractor_extractasjson",
+      "smartdomextractor_smartdomextractor_extractfromariayaml",
+      "smartdomextractor_smartdomextractor_extractfromfallbackelements",
+      "smartdomextractor_smartdomextractor_markdowntojson"
+    ],
     "10": [
-      "contextmanager",
-      "contextmanager_contextmanager",
-      "contextmanager_contextmanager_countelements",
-      "contextmanager_contextmanager_extractkeyselectors",
-      "contextmanager_contextmanager_getcompactedhistory",
-      "contextmanager_contextmanager_getinstance",
-      "contextmanager_contextmanager_getlatesturl",
-      "contextmanager_contextmanager_getscancount",
-      "contextmanager_contextmanager_geturlcount",
-      "contextmanager_contextmanager_recordscan",
-      "contextmanager_contextmanager_reset"
+      "codebaseanalyzerservice",
+      "codebaseanalyzerservice_codebaseanalyzerservice",
+      "codebaseanalyzerservice_codebaseanalyzerservice_analyze",
+      "codebaseanalyzerservice_codebaseanalyzerservice_detectnamingconvention",
+      "codebaseanalyzerservice_codebaseanalyzerservice_directoryexists",
+      "codebaseanalyzerservice_codebaseanalyzerservice_extractpublicmethods",
+      "codebaseanalyzerservice_codebaseanalyzerservice_extractsamplestructure",
+      "codebaseanalyzerservice_codebaseanalyzerservice_extractsteps",
+      "codebaseanalyzerservice_codebaseanalyzerservice_fileexists",
+      "codebaseanalyzerservice_codebaseanalyzerservice_readallfiles",
+      "codebaseanalyzerservice_codebaseanalyzerservice_resolveandextractwrappermethods"
     ],
     "11": [
-      "observabilityservice",
-      "observabilityservice_observabilityservice",
-      "observabilityservice_observabilityservice_constructor",
-      "observabilityservice_observabilityservice_emit",
-      "observabilityservice_observabilityservice_getinstance",
-      "observabilityservice_observabilityservice_getstream",
-      "observabilityservice_observabilityservice_sanitize",
-      "observabilityservice_observabilityservice_toolend",
-      "observabilityservice_observabilityservice_toolerror",
-      "observabilityservice_observabilityservice_toolstart",
-      "observabilityservice_observabilityservice_warning"
-    ],
-    "12": [
       "selfhealingservice",
       "selfhealingservice_selfhealingservice",
       "selfhealingservice_selfhealingservice_analyzefailure",
@@ -294,6 +241,19 @@
       "selfhealingservice_selfhealingservice_extractfailedlocators",
       "selfhealingservice_selfhealingservice_notifyhealsuccess",
       "selfhealingservice_selfhealingservice_resetattempts"
+    ],
+    "12": [
+      "wrapperintrospectservice",
+      "wrapperintrospectservice_wrapperintrospectservice",
+      "wrapperintrospectservice_wrapperintrospectservice_directoryexists",
+      "wrapperintrospectservice_wrapperintrospectservice_fileexists",
+      "wrapperintrospectservice_wrapperintrospectservice_getwrapperversion",
+      "wrapperintrospectservice_wrapperintrospectservice_introspectwrapper",
+      "wrapperintrospectservice_wrapperintrospectservice_loadwrappercachefromfile",
+      "wrapperintrospectservice_wrapperintrospectservice_resolvepackageroot",
+      "wrapperintrospectservice_wrapperintrospectservice_savewrappercachetofile",
+      "wrapperintrospectservice_wrapperintrospectservice_scanwrapper",
+      "wrapperintrospectservice_wrapperintrospectservice_scanwrapperdir"
     ],
     "13": [
       "dnatrackerservice",
@@ -331,15 +291,15 @@
       "envmanagerservice_envmanagerservice_write"
     ],
     "16": [
-      "smartdomextractor",
-      "smartdomextractor_captext",
-      "smartdomextractor_collectnodes",
-      "smartdomextractor_deriveselector",
-      "smartdomextractor_renderactionablemarkdown",
-      "smartdomextractor_smartdomextractor",
-      "smartdomextractor_smartdomextractor_extract",
-      "smartdomextractor_smartdomextractor_extractfromariayaml",
-      "smartdomextractor_smartdomextractor_extractfromfallbackelements"
+      "locatorauditservice",
+      "locatorauditservice_locatorauditservice",
+      "locatorauditservice_locatorauditservice_audit",
+      "locatorauditservice_locatorauditservice_classifyentry",
+      "locatorauditservice_locatorauditservice_extractclassname",
+      "locatorauditservice_locatorauditservice_extractclassranges",
+      "locatorauditservice_locatorauditservice_generatemarkdownreport",
+      "locatorauditservice_locatorauditservice_lintinlinecontent",
+      "locatorauditservice_locatorauditservice_listtsfiles"
     ],
     "17": [
       "filewriterservice",
@@ -362,14 +322,14 @@
       "learningservice_learningservice_learn"
     ],
     "19": [
-      "locatorauditservice",
-      "locatorauditservice_locatorauditservice",
-      "locatorauditservice_locatorauditservice_audit",
-      "locatorauditservice_locatorauditservice_classifyentry",
-      "locatorauditservice_locatorauditservice_extractclassname",
-      "locatorauditservice_locatorauditservice_extractclassranges",
-      "locatorauditservice_locatorauditservice_generatemarkdownreport",
-      "locatorauditservice_locatorauditservice_listtsfiles"
+      "testcontextgathererservice",
+      "testcontextgathererservice_testcontextgathererservice",
+      "testcontextgathererservice_testcontextgathererservice_buildlocator",
+      "testcontextgathererservice_testcontextgathererservice_extractelements",
+      "testcontextgathererservice_testcontextgathererservice_gather",
+      "testcontextgathererservice_testcontextgathererservice_gatherpage",
+      "testcontextgathererservice_testcontextgathererservice_parseariasnapshot",
+      "testcontextgathererservice_testcontextgathererservice_resolveurl"
     ],
     "20": [
       "errorsystem",
@@ -429,30 +389,14 @@
       "filesuggester_filesuggester_suggest"
     ],
     "26": [
-      "ajaxtoolkitpage",
-      "ajaxtoolkitpage_ajaxtoolkitpage",
-      "ajaxtoolkitpage_ajaxtoolkitpage_navigatedirectly",
-      "ajaxtoolkitpage_ajaxtoolkitpage_navigatetohtmleditor",
-      "ajaxtoolkitpage_ajaxtoolkitpage_replacedemotext",
-      "ajaxtoolkitpage_ajaxtoolkitpage_verifytextpresent"
+      "dependencyservice",
+      "dependencyservice_dependencyservice",
+      "dependencyservice_dependencyservice_detectimplicitframeworks",
+      "dependencyservice_dependencyservice_fileexists",
+      "dependencyservice_dependencyservice_parsedependencies",
+      "dependencyservice_dependencyservice_scanforduplicateplaywrightinstallations"
     ],
     "27": [
-      "jquerysortablepage",
-      "jquerysortablepage_jquerysortablepage",
-      "jquerysortablepage_jquerysortablepage_dragitemtoposition",
-      "jquerysortablepage_jquerysortablepage_itemat",
-      "jquerysortablepage_jquerysortablepage_verifyreorder",
-      "jquerysortablepage_jquerysortablepage_waitforsortablelist"
-    ],
-    "28": [
-      "loginpage",
-      "loginpage_dashboardpage",
-      "loginpage_dashboardpage_isvisible",
-      "loginpage_loginpage",
-      "loginpage_loginpage_login",
-      "loginpage_loginpage_navigate"
-    ],
-    "29": [
       "filestateservice",
       "filestateservice_filestateservice",
       "filestateservice_filestateservice_clearstate",
@@ -460,7 +404,7 @@
       "filestateservice_filestateservice_sha256",
       "filestateservice_filestateservice_validatewritestate"
     ],
-    "30": [
+    "28": [
       "hybridpromptengine",
       "hybridpromptengine_hybridpromptengine",
       "hybridpromptengine_hybridpromptengine_buildhybridblock",
@@ -468,7 +412,7 @@
       "hybridpromptengine_hybridpromptengine_formatchampionblock",
       "hybridpromptengine_hybridpromptengine_selectchampion"
     ],
-    "31": [
+    "29": [
       "projectmaintenanceservice",
       "projectmaintenanceservice_projectmaintenanceservice",
       "projectmaintenanceservice_projectmaintenanceservice_ensureuptodate",
@@ -476,7 +420,7 @@
       "projectmaintenanceservice_projectmaintenanceservice_upgradeproject",
       "projectmaintenanceservice_resolveexe"
     ],
-    "32": [
+    "30": [
       "suitesummaryservice",
       "suitesummaryservice_suitesummaryservice",
       "suitesummaryservice_suitesummaryservice_buildplainenglish",
@@ -484,7 +428,15 @@
       "suitesummaryservice_suitesummaryservice_parsefeaturefile",
       "suitesummaryservice_suitesummaryservice_summarize"
     ],
-    "33": [
+    "31": [
+      "astscrutinizer",
+      "astscrutinizer_astscrutinizer",
+      "astscrutinizer_astscrutinizer_extractpublicmethods",
+      "astscrutinizer_astscrutinizer_extractsteps",
+      "astscrutinizer_astscrutinizer_hasclasslocatorsfast",
+      "astscrutinizer_astscrutinizer_scrutinize"
+    ],
+    "32": [
       "metrics",
       "metrics_metrics",
       "metrics_metrics_getsummary",
@@ -492,7 +444,7 @@
       "metrics_metrics_recordstart",
       "metrics_metrics_registershutdownhook"
     ],
-    "34": [
+    "33": [
       "securityutils",
       "securityutils_auditgeneratedcode",
       "securityutils_safejsonparse",
@@ -500,452 +452,263 @@
       "securityutils_sanitizeshellarg",
       "securityutils_validateprojectpath"
     ],
-    "35": [
-      "ecommercehomepage",
-      "ecommercehomepage_ecommercehomepage",
-      "ecommercehomepage_ecommercehomepage_navigate",
-      "ecommercehomepage_ecommercehomepage_searchfor",
-      "ecommercehomepage_ecommercehomepage_shopbycategory"
-    ],
-    "36": [
-      "ecommerceproductpage",
-      "ecommerceproductpage_ecommerceproductpage",
-      "ecommerceproductpage_ecommerceproductpage_addtocart",
-      "ecommerceproductpage_ecommerceproductpage_addtocartbtn",
-      "ecommerceproductpage_ecommerceproductpage_viewcart"
-    ],
-    "37": [
-      "googlepage",
-      "googlepage_googlepage",
-      "googlepage_googlepage_clicksearchresult",
-      "googlepage_googlepage_navigateto",
-      "googlepage_googlepage_searchfor"
-    ],
-    "38": [
-      "saucedemopage",
-      "saucedemopage_saucedemopage",
-      "saucedemopage_saucedemopage_isinventoryvisible",
-      "saucedemopage_saucedemopage_login",
-      "saucedemopage_saucedemopage_navigate"
-    ],
-    "39": [
+    "34": [
       "servicecontainer",
       "servicecontainer_servicecontainer",
       "servicecontainer_servicecontainer_register",
       "servicecontainer_servicecontainer_reset",
       "servicecontainer_servicecontainer_resolve"
     ],
-    "40": [
+    "35": [
       "analyticsservice",
       "analyticsservice_analyticsservice",
       "analyticsservice_analyticsservice_analyzecoveragegaps",
       "analyticsservice_analyticsservice_generatejirabugprompt",
       "analyticsservice_analyticsservice_generatercaprompt"
     ],
-    "41": [
+    "36": [
       "bugreportservice",
       "bugreportservice_bugreportservice",
       "bugreportservice_bugreportservice_classifyseverity",
       "bugreportservice_bugreportservice_extracterrorsummary",
       "bugreportservice_bugreportservice_generatebugreport"
     ],
-    "42": [
+    "37": [
       "orchestrationservice",
       "orchestrationservice_orchestrationservice",
       "orchestrationservice_orchestrationservice_constructor",
       "orchestrationservice_orchestrationservice_createtestatomically",
       "orchestrationservice_orchestrationservice_healandverifyatomically"
     ],
-    "43": [
+    "38": [
       "sandboxengine",
       "sandboxengine_createsafeconsole",
       "sandboxengine_executesandbox",
       "sandboxengine_resolvesafepath",
       "sandboxengine_validatescript"
     ],
-    "44": [
+    "39": [
+      "stagingservice",
+      "stagingservice_stagingservice",
+      "stagingservice_stagingservice_cleanup",
+      "stagingservice_stagingservice_parsetscerrors",
+      "stagingservice_stagingservice_stageandvalidate"
+    ],
+    "40": [
       "testgenerationservice",
       "testgenerationservice_testgenerationservice",
       "testgenerationservice_testgenerationservice_compressfeaturefiles",
       "testgenerationservice_testgenerationservice_generatepromptinstruction",
       "testgenerationservice_testgenerationservice_injectnavgraph"
     ],
-    "45": [
+    "41": [
       "utilauditservice",
       "utilauditservice_utilauditservice",
       "utilauditservice_utilauditservice_audit",
       "utilauditservice_utilauditservice_extractmethodsfromfile",
       "utilauditservice_utilauditservice_scanutilsdir"
     ],
-    "46": [
+    "42": [
       "fileguard",
       "fileguard_fileguard",
       "fileguard_fileguard_hasbinaryzero",
       "fileguard_fileguard_isbinary",
       "fileguard_fileguard_readtextfilesafely"
     ],
-    "47": [
+    "43": [
       "heuristicmatcher",
       "heuristicmatcher_heuristicmatcher",
       "heuristicmatcher_heuristicmatcher_findbestmatches",
       "heuristicmatcher_heuristicmatcher_lcslength",
       "heuristicmatcher_heuristicmatcher_similarity"
     ],
-    "48": [
+    "44": [
       "questioner",
       "questioner_clarificationrequired",
       "questioner_clarificationrequired_constructor",
       "questioner_questioner",
       "questioner_questioner_clarify"
     ],
-    "49": [
+    "45": [
       "requesttracer",
       "requesttracer_requesttracer",
       "requesttracer_requesttracer_getcurrentid",
       "requesttracer_requesttracer_startrequest",
       "requesttracer_requesttracer_tag"
     ],
-    "50": [
+    "46": [
       "retryengine",
       "retryengine_istransienterror",
       "retryengine_sleep",
       "retryengine_withretry",
       "retryengine_withretrywrapper"
     ],
-    "51": [
+    "47": [
       "index",
       "index_getnavservice",
       "index_startserver",
       "index_wrappedhandler"
     ],
-    "52": [
+    "48": [
       "coverageanalysisservice",
       "coverageanalysisservice_coverageanalysisservice",
       "coverageanalysisservice_coverageanalysisservice_analyzecoverage",
       "coverageanalysisservice_coverageanalysisservice_getcoverageprompt"
     ],
-    "53": [
-      "dependencyservice",
-      "dependencyservice_dependencyservice",
-      "dependencyservice_dependencyservice_detectimplicitframeworks",
-      "dependencyservice_dependencyservice_parsedependencies"
-    ],
-    "54": [
+    "49": [
       "fewshotlibrary",
       "fewshotlibrary_fewshotlibrary",
       "fewshotlibrary_fewshotlibrary_getcotscaffold",
       "fewshotlibrary_fewshotlibrary_getnegativeexample"
     ],
-    "55": [
+    "50": [
       "seleniummigrationservice",
       "seleniummigrationservice_seleniummigrationservice",
       "seleniummigrationservice_seleniummigrationservice_constructor",
       "seleniummigrationservice_seleniummigrationservice_generatemigrationprompt"
     ],
-    "56": [
-      "stagingservice",
-      "stagingservice_stagingservice",
-      "stagingservice_stagingservice_cleanup",
-      "stagingservice_stagingservice_stageandvalidate"
-    ],
-    "57": [
+    "51": [
       "testrunnerservice",
       "testrunnerservice_testrunnerservice",
       "testrunnerservice_testrunnerservice_constructor",
       "testrunnerservice_testrunnerservice_runtests"
     ],
-    "58": [
+    "52": [
       "errorclassifier",
       "errorclassifier_errorclassifier",
       "errorclassifier_errorclassifier_classify",
       "errorclassifier_errorclassifier_getreasondescription"
     ],
-    "59": [
+    "53": [
+      "jsontostepstranspiler",
+      "jsontostepstranspiler_jsontostepstranspiler",
+      "jsontostepstranspiler_jsontostepstranspiler_transpile",
+      "jsontostepstranspiler_jsontostepstranspiler_validate"
+    ],
+    "54": [
       "screenshotstorage",
       "screenshotstorage_screenshotstorage",
       "screenshotstorage_screenshotstorage_getstoragedirectory",
       "screenshotstorage_screenshotstorage_storebase64"
     ],
-    "60": [
+    "55": [
       "tsconfigmanager",
       "tsconfigmanager_tsconfigmanager",
       "tsconfigmanager_tsconfigmanager_addpathmapping",
       "tsconfigmanager_tsconfigmanager_ensureparentdirs"
     ],
-    "61": [
-      "migrate_tools",
-      "migrate_tools_main",
-      "migrate_tools_schematozod"
-    ],
-    "62": [
-      "ecommercecartpage",
-      "ecommercecartpage_ecommercecartpage",
-      "ecommercecartpage_ecommercecartpage_proceedtocheckout"
-    ],
-    "63": [
-      "ecommercecategorypage",
-      "ecommercecategorypage_ecommercecategorypage",
-      "ecommercecategorypage_ecommercecategorypage_selectproduct"
-    ],
-    "64": [
-      "ecommercecheckoutpage",
-      "ecommercecheckoutpage_ecommercecheckoutpage",
-      "ecommercecheckoutpage_ecommercecheckoutpage_verifyoncheckoutpage"
-    ],
-    "65": [
+    "56": [
       "dominspectorservice",
       "dominspectorservice_dominspectorservice",
       "dominspectorservice_dominspectorservice_inspect"
     ],
-    "66": [
+    "57": [
       "fixturedataservice",
       "fixturedataservice_fixturedataservice",
       "fixturedataservice_fixturedataservice_generatefixtureprompt"
     ],
-    "67": [
+    "58": [
       "pipelineservice",
       "pipelineservice_pipelineservice",
       "pipelineservice_pipelineservice_generatepipeline"
     ],
-    "68": [
+    "59": [
       "refactoringservice",
       "refactoringservice_refactoringservice",
       "refactoringservice_refactoringservice_generaterefactoringsuggestions"
     ],
-    "69": [
-      "astscrutinizer",
-      "astscrutinizer_astscrutinizer",
-      "astscrutinizer_astscrutinizer_scrutinize"
-    ],
-    "70": [
+    "60": [
       "extensionloader",
       "extensionloader_extensionloader",
       "extensionloader_extensionloader_loadextensionsforprompt"
     ],
-    "71": [
+    "61": [
       "jsontopomtranspiler",
       "jsontopomtranspiler_jsontopomtranspiler",
       "jsontopomtranspiler_jsontopomtranspiler_transpile"
     ],
-    "72": [
+    "62": [
       "responsehelper",
       "responsehelper_textresult",
       "responsehelper_truncate"
     ],
-    "73": [
-      "test_client",
-      "test_client_main"
+    "63": [
+      "pageobjectlinter",
+      "pageobjectlinter_lintpageobject"
     ],
-    "74": [
-      "user_helper",
-      "user_helper_getuser"
+    "64": [
+      "testcontext"
     ],
-    "75": [
-      "codebaseanalyzerservice_d",
-      "codebaseanalyzerservice_d_codebaseanalyzerservice"
-    ],
-    "76": [
-      "dominspectorservice_d",
-      "dominspectorservice_d_dominspectorservice"
-    ],
-    "77": [
-      "filewriterservice_d",
-      "filewriterservice_d_filewriterservice"
-    ],
-    "78": [
-      "selfhealingservice_d",
-      "selfhealingservice_d_selfhealingservice"
-    ],
-    "79": [
-      "testgenerationservice_d",
-      "testgenerationservice_d_testgenerationservice"
-    ],
-    "80": [
-      "testrunnerservice_d",
-      "testrunnerservice_d_testrunnerservice"
-    ],
-    "81": [
-      "migrated_tools"
-    ],
-    "82": [
-      "patch_descriptions"
-    ],
-    "83": [
-      "playwright_config"
-    ],
-    "84": [
-      "ajax_toolkit_steps"
-    ],
-    "85": [
-      "datepicker_steps"
-    ],
-    "86": [
-      "jquery_sortable_steps"
-    ],
-    "87": [
-      "login_steps"
-    ],
-    "88": [
-      "purchaseflow_steps"
-    ],
-    "89": [
-      "saucedemo_steps"
-    ],
-    "90": [
-      "fix_index"
-    ],
-    "91": [
-      "connection_rationale_22"
-    ],
-    "92": [
-      "index_d"
-    ],
-    "93": [
-      "icodebaseanalyzer_d"
-    ],
-    "94": [
-      "icodebaseanalyzer"
-    ],
-    "95": [
-      "idominspector_d"
-    ],
-    "96": [
-      "idominspector"
-    ],
-    "97": [
-      "itestgenerator_d"
-    ],
-    "98": [
-      "itestgenerator"
-    ],
-    "99": [
-      "itestrunner_d"
-    ],
-    "100": [
-      "itestrunner"
-    ],
-    "101": [
-      "codebaseanalyzerservice_test"
-    ],
-    "102": [
-      "extensionloader_test"
-    ],
-    "103": [
-      "locatorauditservice_test"
-    ],
-    "104": [
-      "sandboxengine_test"
-    ],
-    "105": [
-      "securityutils_test"
+    "65": [
+      "config"
     ]
   },
   "cohesion": {
-    "0": 0.1,
-    "1": 0.27,
-    "2": 0.2,
-    "3": 0.14,
-    "4": 0.19,
-    "5": 0.22,
-    "6": 0.31,
-    "7": 0.24,
-    "8": 0.31,
-    "9": 0.26,
-    "10": 0.22,
-    "11": 0.33,
-    "12": 0.29,
+    "0": 0.2,
+    "1": 0.19,
+    "2": 0.31,
+    "3": 0.24,
+    "4": 0.28,
+    "5": 0.31,
+    "6": 0.2,
+    "7": 0.3,
+    "8": 0.26,
+    "9": 0.36,
+    "10": 0.35,
+    "11": 0.29,
+    "12": 0.44,
     "13": 0.4,
     "14": 0.33,
     "15": 0.42,
-    "16": 0.47,
+    "16": 0.36,
     "17": 0.43,
     "18": 0.5,
-    "19": 0.43,
+    "19": 0.46,
     "20": 0.36,
     "21": 0.32,
     "22": 0.36,
     "23": 0.38,
     "24": 0.48,
     "25": 0.48,
-    "26": 0.33,
-    "27": 0.4,
-    "28": 0.33,
+    "26": 0.4,
+    "27": 0.47,
+    "28": 0.53,
     "29": 0.47,
     "30": 0.53,
-    "31": 0.47,
-    "32": 0.53,
+    "31": 0.33,
+    "32": 0.33,
     "33": 0.33,
-    "34": 0.33,
+    "34": 0.4,
     "35": 0.4,
-    "36": 0.4,
+    "36": 0.6,
     "37": 0.4,
-    "38": 0.4,
-    "39": 0.4,
-    "40": 0.4,
+    "38": 0.6,
+    "39": 0.6,
+    "40": 0.6,
     "41": 0.6,
-    "42": 0.4,
-    "43": 0.6,
-    "44": 0.6,
-    "45": 0.6,
+    "42": 0.6,
+    "43": 0.5,
+    "44": 0.4,
+    "45": 0.5,
     "46": 0.6,
     "47": 0.5,
-    "48": 0.4,
+    "48": 0.5,
     "49": 0.5,
-    "50": 0.6,
+    "50": 0.5,
     "51": 0.5,
-    "52": 0.5,
+    "52": 0.67,
     "53": 0.5,
-    "54": 0.5,
+    "54": 0.67,
     "55": 0.5,
     "56": 0.67,
-    "57": 0.5,
+    "57": 0.67,
     "58": 0.67,
     "59": 0.67,
-    "60": 0.5,
-    "61": 1.0,
+    "60": 0.67,
+    "61": 0.67,
     "62": 0.67,
-    "63": 0.67,
-    "64": 0.67,
-    "65": 0.67,
-    "66": 0.67,
-    "67": 0.67,
-    "68": 0.67,
-    "69": 0.67,
-    "70": 0.67,
-    "71": 0.67,
-    "72": 0.67,
-    "73": 1.0,
-    "74": 1.0,
-    "75": 1.0,
-    "76": 1.0,
-    "77": 1.0,
-    "78": 1.0,
-    "79": 1.0,
-    "80": 1.0,
-    "81": 1.0,
-    "82": 1.0,
-    "83": 1.0,
-    "84": 1.0,
-    "85": 1.0,
-    "86": 1.0,
-    "87": 1.0,
-    "88": 1.0,
-    "89": 1.0,
-    "90": 1.0,
-    "91": 1.0,
-    "92": 1.0,
-    "93": 1.0,
-    "94": 1.0,
-    "95": 1.0,
-    "96": 1.0,
-    "97": 1.0,
-    "98": 1.0,
-    "99": 1.0,
-    "100": 1.0,
-    "101": 1.0,
-    "102": 1.0,
-    "103": 1.0,
-    "104": 1.0,
-    "105": 1.0
+    "63": 1.0,
+    "64": 1.0,
+    "65": 1.0
   }
 }

@@ -1,8 +1,8 @@
 {
   "version": "2.4.0",
   "tags": [
-    "ecommerce",
-    "lambdatest"
+    "saucedemo",
+    "ecommerce"
   ],
   "envKeys": {
     "baseUrl": "BASE_URL"
@@ -26,7 +26,7 @@
   "credentials": {
     "strategy": "users-json"
   },
-  "currentEnvironment": "prod",
+  "currentEnvironment": "local",
   "environments": [
     "local",
     "staging",

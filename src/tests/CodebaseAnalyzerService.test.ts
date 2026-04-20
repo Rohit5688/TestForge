@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs/promises';
-import { CodebaseAnalyzerService } from '../services/CodebaseAnalyzerService.js';
+import { CodebaseAnalyzerService } from '../services/analysis/CodebaseAnalyzerService.js';
 
 describe('CodebaseAnalyzerService (TestForge Unit Tests)', () => {
   let analyzerService: CodebaseAnalyzerService;

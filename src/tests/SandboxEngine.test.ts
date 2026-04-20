@@ -13,8 +13,8 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { executeSandbox } from '../services/SandboxEngine.js';
-import type { SandboxApiRegistry } from '../services/SandboxEngine.js';
+import { executeSandbox } from '../services/execution/SandboxExecutionService.js';
+import type { SandboxApiRegistry } from '../services/execution/SandboxExecutionService.js';
 
 describe('SandboxEngine - Core Execution', () => {
   it('should execute a simple script and return a result', async () => {

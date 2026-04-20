@@ -17,3 +17,24 @@ scratch/
 # IDE settings
 .vscode/
 .idea/
+
+# Environment secrets
+.env.local
+
+# Environment secrets
+.env.staging
+
+# Environment secrets
+.env.prod
+
+# User credential stores (never commit)
+test-data/users.local.json
+
+# Local environment / API keys (never commit)
+.env
+
+# User credential stores (never commit)
+test-data/users.staging.json
+
+# User credential stores (never commit)
+test-data/users.prod.json

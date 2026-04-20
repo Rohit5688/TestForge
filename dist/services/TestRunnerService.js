@@ -89,7 +89,8 @@ export class TestRunnerService {
                     cwd: projectRoot,
                     timeout: runTimeout,
                     env: mergedEnv,
-                    stdio: ['ignore', 'pipe', 'pipe']
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                    shell: isWin
                 }), RetryPolicies.fileWrite);
                 const { stdout, stderr } = execResult;
                 aggregatedStdout += stdout + '\n';

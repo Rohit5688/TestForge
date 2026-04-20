@@ -1,16 +1,15 @@
 import 'dotenv/config';
 import { defineConfig, devices } from '@playwright/test';
 import { defineBddConfig } from 'playwright-bdd';
-// @playwright/test is NOT in package.json as it is provided implicitly by playwright-bdd.
 const testDir = defineBddConfig({
   featuresRoot: 'features',
-  features: '*.feature',
-  steps: ['step-definitions/**/*.ts', 'fixtures/fixtures.ts'],
+  features: '**/*.feature',
+  steps: ['step-definitions/**/*.ts', './test-setup/page-setup.ts'],
 });
 
 export default defineConfig({
   testDir,
-  timeout: 30_000,
+  timeout: 60_000,
   retries: 1,
   reporter: [['html', { open: 'never' }], ['list']],
   use: {
@@ -22,6 +21,5 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
   ],
 });

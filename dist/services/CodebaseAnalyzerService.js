@@ -6,6 +6,8 @@ import { Project, SyntaxKind, Node } from 'ts-morph';
 import { McpConfigService, DEFAULT_CONFIG } from './McpConfigService.js';
 import { McpErrors } from '../types/ErrorSystem.js';
 import { DependencyService } from './DependencyService.js';
+import { ASTScrutinizer } from '../utils/ASTScrutinizer.js';
+import { WrapperIntrospectService } from './WrapperIntrospectService.js';
 import { ExtensionLoader } from '../utils/ExtensionLoader.js';
 export class CodebaseAnalyzerService {
     wrapperCache = new Map();
@@ -35,9 +37,10 @@ export class CodebaseAnalyzerService {
         result.detectedPaths.stepsRoot = config.dirs.stepDefinitions;
         result.detectedPaths.pagesRoot = config.dirs.pages;
         // Introspect custom wrapper if specified (version-based caching)
+        const introspector = new WrapperIntrospectService();
         const wrapper = customWrapperPackage || mcpConfig.getCustomWrapper(config);
         if (wrapper) {
-            result.customWrapper = await this.introspectWrapper(projectRoot, wrapper);
+            result.customWrapper = await introspector.introspectWrapper(projectRoot, wrapper);
         }
         result.mcpConfig = {
             version: config.version || '0.0.0',
@@ -91,7 +94,7 @@ export class CodebaseAnalyzerService {
                     const relPath = path.relative(projectRoot, filePath).replace(/\\/g, '/');
                     const content = sourceFile.getFullText();
                     // Look for step definitions (using Regex for strict BDD steps to match Playwright-BDD structure)
-                    const steps = this.extractSteps(content);
+                    const steps = ASTScrutinizer.extractSteps(content);
                     if (steps.length > 0) {
                         stepDefs.push({ file: relPath, steps });
                         if (result.detectedPaths.stepsRoot === config.dirs.stepDefinitions)
@@ -105,7 +108,7 @@ export class CodebaseAnalyzerService {
                     for (const cls of classes) {
                         const className = cls.getName() || '';
                         const isStandardPom = className.toLowerCase().includes('page') || className.toLowerCase().includes('screen');
-                        const hasClassLocators = this.hasClassLocatorsFast(content);
+                        const hasClassLocators = ASTScrutinizer.hasClassLocatorsFast(content);
                         if (isStandardPom || hasClassLocators) {
                             const publicMethods = cls.getMethods()
                                 .filter(m => !m.hasModifier(SyntaxKind.PrivateKeyword) && !m.hasModifier(SyntaxKind.ProtectedKeyword))
@@ -125,7 +128,7 @@ export class CodebaseAnalyzerService {
                         const initializer = varDecl.getInitializer();
                         if (initializer && Node.isObjectLiteralExpression(initializer)) {
                             const bodyText = initializer.getText();
-                            hasLocators = this.hasClassLocatorsFast(bodyText);
+                            hasLocators = ASTScrutinizer.hasClassLocatorsFast(bodyText);
                             for (const prop of initializer.getProperties()) {
                                 if (Node.isMethodDeclaration(prop)) {
                                     publicMethods.push(prop.getName() + '()');
@@ -142,7 +145,7 @@ export class CodebaseAnalyzerService {
                             // Standalone exported arrow function
                             if (varDecl.isExported()) {
                                 const bodyText = initializer.getText();
-                                hasLocators = this.hasClassLocatorsFast(bodyText);
+                                hasLocators = ASTScrutinizer.hasClassLocatorsFast(bodyText);
                                 if (hasLocators || isStandardPom) {
                                     publicMethods.push(name + '()');
                                 }
@@ -228,7 +231,7 @@ export class CodebaseAnalyzerService {
                 }
                 else {
                     // Fallback: full recursive scan (handles edge case where early path didn't run)
-                    extractedMethods = await this.scanWrapper(projectRoot, customWrapperPackage);
+                    extractedMethods = await introspector.scanWrapper(projectRoot, customWrapperPackage);
                     isInstalled = extractedMethods.length > 0;
                 }
                 result.customWrapper = {
@@ -415,7 +418,7 @@ RULES FOR AI:
                 result.recommendation = "Playwright-BDD is present. Reuse existing wrapper base pages and extend Page Object Models.";
             }
             // 10. Phase 43: Duplicate Installation Guard
-            const warnings = await this.scanForDuplicatePlaywrightInstallations(projectRoot);
+            const warnings = await depService.scanForDuplicatePlaywrightInstallations(projectRoot);
             if (warnings.length > 0) {
                 result.duplicateInstallWarnings = warnings;
                 result.recommendation += "\nCRITICAL WARNING: Multiple @playwright/test installations detected. This will cause 'describe() unexpectedly called' errors. You MUST uninstall the duplicates.";
@@ -439,48 +442,6 @@ RULES FOR AI:
         catch {
             return false;
         }
-    }
-    /**
-     * BUG-11 FIX: Scans for duplicate @playwright/test installations that cause
-     * the 'describe() unexpectedly called' error.
-     *
-     * PREVIOUS (BROKEN): walked UP the directory tree. In a monorepo this always
-     * finds the workspace-root @playwright/test and fires a false-positive warning.
-     *
-     * FIXED: Scans DOWNWARD — checks depth-2 in node_modules (i.e. a direct
-     * dependency that bundled its own @playwright/test copy). This is the only
-     * scenario that truly causes loader conflicts, not a shared monorepo install.
-     */
-    async scanForDuplicatePlaywrightInstallations(startDir) {
-        const installations = [];
-        // Level 1: canonical project-level install
-        const projectInstall = path.join(startDir, 'node_modules', '@playwright', 'test', 'package.json');
-        if (await this.fileExists(projectInstall)) {
-            installations.push(startDir);
-        }
-        // Level 2: any direct dependency that ships its own @playwright/test copy
-        const depModulesRoot = path.join(startDir, 'node_modules');
-        try {
-            const topLevelDeps = await fs.readdir(depModulesRoot, { withFileTypes: true });
-            for (const dep of topLevelDeps) {
-                if (!dep.isDirectory() || dep.name.startsWith('.') || dep.name.startsWith('@'))
-                    continue;
-                const nestedPath = path.join(depModulesRoot, dep.name, 'node_modules', '@playwright', 'test', 'package.json');
-                if (await this.fileExists(nestedPath)) {
-                    installations.push(path.join(depModulesRoot, dep.name));
-                }
-            }
-        }
-        catch {
-            // node_modules doesn't exist yet — not an error
-        }
-        if (installations.length > 1) {
-            return [
-                `Duplicate @playwright/test found. Project has its own install AND these dependencies bundle a copy: ${installations.slice(1).join(', ')}.`,
-                `Recommendation: Run npm dedupe, or add a resolution/override in package.json to pin @playwright/test to a single version. Double-loading breaks test.describe().`
-            ];
-        }
-        return [];
     }
     async directoryExists(dirPath) {
         try {
@@ -527,130 +488,6 @@ RULES FOR AI:
             return `PascalCase${ext}`;
         return `camelCase${ext}`;
     }
-    hasClassLocatorsFast(content) {
-        return content.includes('page.locator') || content.includes('page.getBy') || content.includes('page.$') || content.includes('page.goto');
-    }
-    /**
-     * Enhanced AST-based method extraction for TypeScript classes using ts-morph.
-     * Leveraged primarily to resolve custom wrapper packages.
-     *
-     * For .d.ts files, also uses regex fallback to extract `export declare function` patterns
-     * since ts-morph may not capture all declaration file patterns.
-     */
-    extractPublicMethods(content) {
-        const methods = [];
-        // Regex fallback for .d.ts files: extract `export declare function functionName(`
-        const declareMatches = content.matchAll(/export\s+declare\s+function\s+(\w+)\s*\(/g);
-        for (const match of declareMatches) {
-            if (match[1])
-                methods.push(match[1] + '()');
-        }
-        // If we found methods via regex (common for .d.ts), return them
-        if (methods.length > 0) {
-            return [...new Set(methods)];
-        }
-        // Otherwise, use ts-morph for source files
-        try {
-            const project = new Project({ compilerOptions: { strict: false }, skipAddingFilesFromTsConfig: true });
-            const sourceFile = project.createSourceFile('temp.ts', content);
-            for (const cls of sourceFile.getClasses()) {
-                const publicMethods = cls.getMethods()
-                    .filter(m => !m.hasModifier(SyntaxKind.PrivateKeyword) && !m.hasModifier(SyntaxKind.ProtectedKeyword))
-                    .map(m => m.getName() + '()');
-                methods.push(...publicMethods);
-            }
-            for (const varDecl of sourceFile.getVariableDeclarations()) {
-                const initializer = varDecl.getInitializer();
-                if (initializer && Node.isObjectLiteralExpression(initializer)) {
-                    for (const prop of initializer.getProperties()) {
-                        if (Node.isMethodDeclaration(prop)) {
-                            methods.push(prop.getName() + '()');
-                        }
-                        else if (Node.isPropertyAssignment(prop)) {
-                            const propInit = prop.getInitializer();
-                            if (propInit && (Node.isArrowFunction(propInit) || Node.isFunctionExpression(propInit))) {
-                                methods.push(prop.getName() + '()');
-                            }
-                        }
-                    }
-                }
-            }
-            for (const fn of sourceFile.getFunctions()) {
-                if (fn.isExported()) {
-                    methods.push(fn.getName() + '()');
-                }
-            }
-            return [...new Set(methods)];
-        }
-        catch (e) {
-            return [...new Set(methods)]; // Return regex matches if ts-morph fails
-        }
-    }
-    /**
-     * Extracts BDD step patterns from file content (Given, When, Then).
-     */
-    extractSteps(fileContent) {
-        const steps = [];
-        const stepRegex = /(?:Given|When|Then|Step)\s*\(\s*['"`](.*?)['"`]/g;
-        let match;
-        while ((match = stepRegex.exec(fileContent)) !== null) {
-            if (match[1])
-                steps.push(match[1]);
-        }
-        return steps;
-    }
-    /**
-     * Attempts to resolve the custom wrapper package (either local relative path or inside node_modules)
-     * and extract explicitly defined public methods from its source (.ts) or typing (.d.ts) files.
-     */
-    async resolveAndExtractWrapperMethods(projectRoot, wrapperPath) {
-        try {
-            // 1. Check if it's a local file relative to projectRoot
-            const localPath = path.resolve(projectRoot, wrapperPath);
-            if (await this.fileExists(localPath)) {
-                return this.extractPublicMethods(await fs.readFile(localPath, 'utf8'));
-            }
-            if (await this.fileExists(localPath + '.ts')) {
-                return this.extractPublicMethods(await fs.readFile(localPath + '.ts', 'utf8'));
-            }
-            // 2. Resolve via full Node module resolution (handles hoisting / workspaces / pnpm)
-            const resolvedRoot = this.resolvePackageRoot(projectRoot, wrapperPath);
-            const nodeModulesPath = resolvedRoot ?? path.join(projectRoot, 'node_modules', wrapperPath);
-            if (await this.directoryExists(nodeModulesPath)) {
-                const pkgPath = path.join(nodeModulesPath, 'package.json');
-                if (await this.fileExists(pkgPath)) {
-                    const pkg = JSON.parse(await fs.readFile(pkgPath, 'utf8'));
-                    const entryPoint = pkg.types || pkg.typings || pkg.main || 'index.js';
-                    const entryPath = path.join(nodeModulesPath, entryPoint);
-                    if (await this.fileExists(entryPath)) {
-                        const content = await fs.readFile(entryPath, 'utf8');
-                        let methods = this.extractPublicMethods(content);
-                        if (methods.length > 0)
-                            return methods;
-                        // if entry was a .js file, look for its .d.ts equivalent
-                        if (entryPath.endsWith('.js')) {
-                            const dtsPath = entryPath.replace(/\.js$/, '.d.ts');
-                            if (await this.fileExists(dtsPath)) {
-                                return this.extractPublicMethods(await fs.readFile(dtsPath, 'utf8'));
-                            }
-                        }
-                    }
-                }
-                // Fallback for node_modules: common entry points
-                const fallbacks = ['index.d.ts', 'index.ts', 'BasePage.ts', 'BasePage.d.ts'];
-                for (const fallback of fallbacks) {
-                    const fallbackPath = path.join(nodeModulesPath, fallback);
-                    if (await this.fileExists(fallbackPath)) {
-                        return this.extractPublicMethods(await fs.readFile(fallbackPath, 'utf8'));
-                    }
-                }
-            }
-        }
-        catch (e) {
-            // Silently fail and return empty array if resolution drops, graceful degradation
-        }
-        return [];
-    }
     /**
      * Naively extracts top-level keys or structures from JSON/TS/JS data files.
      * Returns a string summarizing the shape (e.g. "{ id, name, details: { ... } }")
@@ -679,207 +516,6 @@ RULES FOR AI:
         }
         catch {
             return 'structure could not be parsed';
-        }
-    }
-    /**
-     * Introspects a custom wrapper package with version-based caching.
-     * Cache key = pkg@version, invalidates automatically when package updates.
-     * Uses file-based persistence (.TestForge/wrapper-cache.json) to survive server restarts.
-     */
-    async introspectWrapper(projectRoot, pkg) {
-        // Get wrapper version for cache key
-        const version = await this.getWrapperVersion(projectRoot, pkg);
-        const cacheKey = `${pkg}@${version}`;
-        // Check in-memory cache first
-        if (this.wrapperCache.has(cacheKey)) {
-            console.error(`[Wrapper] Memory cache hit: ${cacheKey}`);
-            return this.wrapperCache.get(cacheKey);
-        }
-        // Check file-based cache
-        const cacheFilePath = path.join(projectRoot, '.TestForge', 'wrapper-cache.json');
-        const cachedFromFile = await this.loadWrapperCacheFromFile(cacheFilePath, cacheKey);
-        if (cachedFromFile) {
-            console.error(`[Wrapper] File cache hit: ${cacheKey}`);
-            this.wrapperCache.set(cacheKey, cachedFromFile);
-            return cachedFromFile;
-        }
-        console.error(`[Wrapper] Cache miss - scanning ${cacheKey}...`);
-        // Scan wrapper
-        const detectedMethods = await this.scanWrapper(projectRoot, pkg);
-        const isInstalled = detectedMethods.length > 0;
-        const result = {
-            package: pkg,
-            detectedMethods,
-            isInstalled
-        };
-        // Cache result in memory
-        this.wrapperCache.set(cacheKey, result);
-        console.error(`[Wrapper] Cached ${detectedMethods.length} methods from ${cacheKey}`);
-        // Persist to file
-        await this.saveWrapperCacheToFile(cacheFilePath, cacheKey, result);
-        return result;
-    }
-    /**
-     * Load wrapper cache from .TestForge/wrapper-cache.json
-     */
-    async loadWrapperCacheFromFile(cacheFilePath, cacheKey) {
-        try {
-            if (!await this.fileExists(cacheFilePath))
-                return null;
-            const content = await fs.readFile(cacheFilePath, 'utf8');
-            const cache = JSON.parse(content);
-            return cache[cacheKey] || null;
-        }
-        catch {
-            return null;
-        }
-    }
-    /**
-     * Save wrapper cache to .TestForge/wrapper-cache.json
-     */
-    async saveWrapperCacheToFile(cacheFilePath, cacheKey, result) {
-        try {
-            const cacheDir = path.dirname(cacheFilePath);
-            if (!await this.directoryExists(cacheDir)) {
-                await fs.mkdir(cacheDir, { recursive: true });
-            }
-            let cache = {};
-            if (await this.fileExists(cacheFilePath)) {
-                const content = await fs.readFile(cacheFilePath, 'utf8');
-                cache = JSON.parse(content);
-            }
-            cache[cacheKey] = result;
-            await fs.writeFile(cacheFilePath, JSON.stringify(cache, null, 2), 'utf8');
-        }
-        catch (e) {
-            console.error(`[Wrapper] Failed to save cache: ${e}`);
-        }
-    }
-    /**
-     * Resolves the on-disk root directory of a package using Node.js module
-     * resolution (handles hoisted packages, workspaces, symlinks) with a manual
-     * directory-tree walk as fallback.
-     *
-     * Returns null if the package cannot be found anywhere in the resolution chain.
-     */
-    resolvePackageRoot(projectRoot, packageName) {
-        // Strategy 1: Node.js require resolution — the most reliable approach.
-        // It respects symlinks, pnpm virtual stores, yarn PnP, npm workspaces, etc.
-        try {
-            const requireFromProject = createRequire(path.join(projectRoot, '__placeholder__.js'));
-            const pkgJsonPath = requireFromProject.resolve(`${packageName}/package.json`);
-            return path.dirname(pkgJsonPath);
-        }
-        catch { /* package not resolvable via require from projectRoot */ }
-        // Strategy 2: Walk UP the directory tree — handles monorepo hoisting where
-        // the package lives two or more levels above projectRoot in node_modules.
-        let dir = projectRoot;
-        while (true) {
-            const candidate = path.join(dir, 'node_modules', packageName);
-            if (fsSync.existsSync(candidate))
-                return candidate;
-            const parent = path.dirname(dir);
-            if (parent === dir)
-                break; // reached filesystem root
-            dir = parent;
-        }
-        return null;
-    }
-    /**
-     * Gets the version of a wrapper package for cache invalidation.
-     * Returns package.json version for npm packages, file mtime for local files.
-     */
-    async getWrapperVersion(projectRoot, pkg) {
-        try {
-            // Try via full resolution (handles hoisting / workspaces)
-            const resolvedRoot = this.resolvePackageRoot(projectRoot, pkg);
-            const pkgJsonPath = resolvedRoot
-                ? path.join(resolvedRoot, 'package.json')
-                : path.join(projectRoot, 'node_modules', pkg, 'package.json');
-            if (await this.fileExists(pkgJsonPath)) {
-                const pkgJson = JSON.parse(await fs.readFile(pkgJsonPath, 'utf8'));
-                return pkgJson.version || 'unknown';
-            }
-            // Try as relative path (local file)
-            const wrapperPath = path.join(projectRoot, pkg);
-            if (await this.fileExists(wrapperPath)) {
-                const stats = await fs.stat(wrapperPath);
-                return stats.mtime.getTime().toString(); // mtime as version
-            }
-            // Check with .ts extension
-            if (await this.fileExists(wrapperPath + '.ts')) {
-                const stats = await fs.stat(wrapperPath + '.ts');
-                return stats.mtime.getTime().toString();
-            }
-            return 'unknown';
-        }
-        catch {
-            return 'unknown';
-        }
-    }
-    /**
-     * Scans a wrapper package (npm or local) and extracts method names.
-     */
-    async scanWrapper(projectRoot, pkg) {
-        // Resolve using full Node module resolution (handles hoisting / workspaces)
-        const resolved = this.resolvePackageRoot(projectRoot, pkg);
-        let wrapperRoot = resolved ?? path.join(projectRoot, 'node_modules', pkg);
-        // Fallback: try as relative path from projectRoot
-        if (!resolved && !await this.directoryExists(wrapperRoot)) {
-            wrapperRoot = path.join(projectRoot, pkg);
-        }
-        if (!await this.directoryExists(wrapperRoot) && !await this.fileExists(wrapperRoot)) {
-            console.error(`[WrapperScan] Package "${pkg}" not found. Tried: ${resolved ?? 'N/A'}, ${path.join(projectRoot, 'node_modules', pkg)}, ${path.join(projectRoot, pkg)}`);
-            return [];
-        }
-        const methods = new Set();
-        // If it's a file, scan it directly
-        if (await this.fileExists(wrapperRoot)) {
-            const content = await fs.readFile(wrapperRoot, 'utf8');
-            return this.extractPublicMethods(content);
-        }
-        // If it's a directory, scan recursively
-        await this.scanWrapperDir(wrapperRoot, methods);
-        return Array.from(methods);
-    }
-    /**
-     * Recursively scans a wrapper directory for method names.
-     * Depth-limited to avoid performance issues.
-     */
-    async scanWrapperDir(dir, methodNames, depth = 0) {
-        if (depth > 5)
-            return; // Max 5 levels deep (needed for dist/utils/*.d.ts)
-        try {
-            const entries = await fs.readdir(dir, { withFileTypes: true });
-            for (const entry of entries) {
-                // Skip common non-source directories
-                if (['test', 'tests', '__tests__', 'docs', 'examples', 'node_modules'].includes(entry.name)) {
-                    continue;
-                }
-                const fullPath = path.join(dir, entry.name);
-                if (entry.isDirectory()) {
-                    console.error(`[WrapperScan] Dir depth=${depth}: ${fullPath}`);
-                    await this.scanWrapperDir(fullPath, methodNames, depth + 1);
-                }
-                else if (entry.name.match(/\.(d\.ts|ts|js)$/)) {
-                    // For compiled packages, .d.ts files are the primary source of type info
-                    // For source packages, .ts files are scanned
-                    // Skip .d.ts ONLY if a corresponding .ts exists
-                    const isDts = entry.name.endsWith('.d.ts');
-                    const correspondingTs = fullPath.replace(/\.d\.ts$/, '.ts');
-                    if (isDts && await this.fileExists(correspondingTs)) {
-                        continue; // Skip .d.ts if .ts source exists
-                    }
-                    console.error(`[WrapperScan] File depth=${depth}: ${fullPath}`);
-                    const content = await fs.readFile(fullPath, 'utf8');
-                    const methods = this.extractPublicMethods(content);
-                    console.error(`[WrapperScan] Extracted ${methods.length} methods from ${entry.name}`);
-                    methods.forEach(m => methodNames.add(m));
-                }
-            }
-        }
-        catch (e) {
-            console.error(`[WrapperScan] Error at depth=${depth}: ${e}`);
         }
     }
 }

@@ -1,6 +1,12 @@
-# Environment secrets
-.env
-
+node_modules/
+dist/
+.features-gen/
+test-results/
+playwright-report/
+*.env
+.env.*
+!.env.example
+test-data/users.*.json
 # Environment secrets
 .env.local
 
@@ -12,6 +18,9 @@
 
 # User credential stores (never commit)
 test-data/users.local.json
+
+# Local environment / API keys (never commit)
+.env
 
 # User credential stores (never commit)
 test-data/users.staging.json

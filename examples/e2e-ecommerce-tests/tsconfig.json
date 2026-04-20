@@ -7,7 +7,11 @@
     "skipLibCheck": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@pages": ["pages/index.js"]
+    }
   },
   "include": [
     "**/*.ts"

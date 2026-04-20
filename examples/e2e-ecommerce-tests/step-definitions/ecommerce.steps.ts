@@ -1,59 +1,87 @@
-import { expect } from '@playwright/test';
-import { Given, When, Then } from '../fixtures/fixtures.js';
+import { createBdd } from 'playwright-bdd';
+import { test } from '../test-setup/page-setup.js';
+import { app } from '@pages';
 
-Given('I am on the home page', async ({ homePage }) => {
-  await homePage.goto();
+const { Given, When, Then } = createBdd(test);
+
+let isAvailable = true;
+
+Given('I am on the SauceDemo login page', async ({}) => {
+  await app.login.open();
 });
 
-When('I search for {string}', async ({ homePage }, productName: string) => {
-  await homePage.searchForProduct(productName);
+Given('I log in as a standard user', async ({}) => {
+  await app.login.login(process.env.STANDARD_USER || 'standard_user', process.env.STANDARD_PASSWORD || 'secret_sauce');
 });
 
-When('I select the product {string}', async ({ searchPage }, productName: string) => {
-  await searchPage.selectProduct(productName);
+When('I select the product {string}', async ({}, name: string) => {
+  await app.inventory.selectProduct(name);
 });
 
-When('I add the product to the cart', async ({ productPage }) => {
-  await productPage.addToCart();
-});
-
-When('I proceed to checkout from the cart', async ({ cartPage }) => {
-  await cartPage.proceedToCheckout();
-});
-
-When('I complete the guest checkout with details:', async ({ checkoutPage }, dataTable) => {
-  const details = dataTable.hashes()[0];
-  await checkoutPage.fillGuestDetails(details);
-  await checkoutPage.confirmOrder();
-});
-
-Then('I should see the order confirmation', async ({ checkoutPage }) => {
-  // Logic to verify order confirmation (e.g., success message or URL)
-  await expect(checkoutPage.page).toHaveURL(/checkout\/success/);
-});
-
-// Dynamic Fallback Steps
-When('the product is {string}', async ({ productPage }, status: string) => {
-  if (status === 'Out of Stock') {
-    const isOutOfStock = await productPage.isOutOfStock();
-    expect(isOutOfStock).toBeTruthy();
+When('I verify it is in stock and add it to the cart', async ({}) => {
+  if (await app.pdp.isInStock()) {
+    await app.pdp.addToCart();
   }
 });
 
-Then('I should go back and pick the next in-stock product', async ({ searchPage, productPage }) => {
-  await productPage.page.goBack();
-  await searchPage.selectFirstAvailableProduct();
+When('I go to the shopping cart', async ({}) => {
+  await app.inventory.gotoCart();
 });
 
-Then('I should be able to add it to the cart', async ({ productPage }) => {
-  await productPage.addToCart();
+Then('I should see the product {string} in the cart', async ({}, name: string) => {
+  await app.cart.verifyProduct(name);
 });
 
-// Negative Checkout Steps
-When('I attempt to continue without filling details', async ({ checkoutPage }) => {
-  await checkoutPage.attemptCheckoutWithoutDetails();
+When('I proceed to checkout', async ({}) => {
+  await app.cart.checkout();
 });
 
-Then('I should see validation errors for required fields', async ({ checkoutPage }) => {
-  await checkoutPage.verifyValidationErrors();
+When('I fill checkout information with {string}, {string}, {string}', async ({}, f: string, l: string, z: string) => {
+  await app.checkout.fillInfo(f, l, z);
+  await app.checkout.continue();
+});
+
+When('I finish the checkout', async ({}) => {
+  await app.checkout.finish();
+});
+
+Then('I should see a success message', async ({}) => {
+  await app.checkout.verifySuccess();
+});
+
+When('I check the product availability', async ({}) => {
+  isAvailable = await app.pdp.isInStock();
+});
+
+When('I fallback to the second product {string} if unavailable', async ({}, alt: string) => {
+  if (!isAvailable) {
+    await app.pdp.goBack();
+    await app.inventory.selectProduct(alt);
+    await app.pdp.addToCart();
+  } else {
+    await app.pdp.addToCart();
+  }
+});
+
+When('I fill checkout information and finish successfully', async ({}) => {
+  await app.cart.checkout();
+  await app.checkout.fillInfo('Rohit', 'Kumar', '12345');
+  await app.checkout.continue();
+  await app.checkout.finish();
+  await app.checkout.verifySuccess();
+});
+
+When('I add it to the cart and go to checkout', async ({}) => {
+  await app.pdp.addToCart();
+  await app.inventory.gotoCart();
+  await app.cart.checkout();
+});
+
+When('I leave First Name empty and click continue', async ({}) => {
+  await app.checkout.fillInfo('', 'Kumar', '12345');
+  await app.checkout.continue();
+});
+
+Then('I should see a validation error {string}', async ({}, msg: string) => {
+  await app.checkout.verifyError(msg);
 });

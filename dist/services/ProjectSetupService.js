@@ -1,46 +1,39 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { McpErrors } from '../types/ErrorSystem.js';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
 import { EnvManagerService } from './EnvManagerService.js';
-import { withRetry, RetryPolicies } from '../utils/RetryEngine.js';
-import { ShellSecurityEngine } from '../utils/ShellSecurityEngine.js';
-import { fileURLToPath } from 'url';
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const execFileAsync = promisify(execFile);
-/** Windows package manager shim: npm/npx need .cmd extension for execFile. */
-function resolveExe(name) {
-    return process.platform === 'win32' ? `${name}.cmd` : name;
-}
+import { ProjectScaffolder } from '../utils/ProjectScaffolder.js';
+import { ConfigTemplateManager } from '../utils/ConfigTemplateManager.js';
+import { DependencyManager } from '../utils/DependencyManager.js';
+import { DocScaffolder } from '../utils/DocScaffolder.js';
 /**
- * ProjectSetupService — Phase 20D + Phase 8 Hardening
+ * ProjectSetupService — Phase 20D + Phase 8 Hardening (Refactored Phase 6)
  *
  * Bootstraps a blank directory into a fully configured Playwright-BDD project.
- * Creates folder structure, installs packages, writes playwright.config.ts,
- * and sets up a .env file via EnvManagerService.
- *
- * Single Responsibility: Only does first-time project scaffolding.
- * repairProject() is safe to call on any existing project — it only fills gaps.
+ * This class acts as a Facade, delegating specific scaffolding tasks to specialized utilities.
  */
 export class ProjectSetupService {
     envManager;
+    scaffolder = new ProjectScaffolder();
+    configManager = new ConfigTemplateManager();
+    dependencyManager = new DependencyManager();
+    docScaffolder = new DocScaffolder();
     constructor(envManager) {
         this.envManager = envManager || new EnvManagerService();
     }
+    /**
+     * Main entry point for project setup.
+     * Handles Phase 1 (Config Template) and Phase 2 (Full Scaffolding).
+     */
     async setup(projectRoot) {
         if (!fs.existsSync(projectRoot)) {
             fs.mkdirSync(projectRoot, { recursive: true });
         }
         const configPath = path.join(projectRoot, 'mcp-config.json');
+        // Phase 1: Create configuration template if it doesn't exist
         if (!fs.existsSync(configPath)) {
-            this.generateConfigTemplate(projectRoot);
-            const docsDir = path.join(projectRoot, 'docs');
-            if (!fs.existsSync(docsDir))
-                fs.mkdirSync(docsDir, { recursive: true });
-            this.scaffoldMcpConfigReference(projectRoot);
-            this.scaffoldPromptCheatbook(projectRoot);
+            this.configManager.generateTemplate(projectRoot);
+            this.docScaffolder.scaffoldReference(projectRoot);
+            this.docScaffolder.scaffoldPromptCheatbook(projectRoot);
             return JSON.stringify({
                 phase: 1,
                 status: 'CONFIG_TEMPLATE_CREATED',
@@ -57,7 +50,8 @@ export class ProjectSetupService {
                 ].join('\n')
             }, null, 2);
         }
-        const unfilledFields = this.scanConfigureMe(projectRoot);
+        // Phase 2: Full Scaffolding
+        const unfilledFields = this.configManager.scanConfigureMe(projectRoot);
         const res = await this._scaffold(projectRoot, false);
         return JSON.stringify({
             phase: 2,
@@ -78,7 +72,7 @@ export class ProjectSetupService {
     async repairProject(projectRoot) {
         const result = await this._scaffold(projectRoot, true);
         const lines = [
-            `\u2705 Project repair completed at ${projectRoot}`,
+            `✅ Project repair completed at ${projectRoot}`,
             result.dirsCreated.length > 0
                 ? `  Directories created: ${result.dirsCreated.join(', ')}`
                 : '  Directories: all present',
@@ -88,416 +82,76 @@ export class ProjectSetupService {
         ];
         return lines.join('\n');
     }
+    /**
+     * Internal scaffolding orchestration.
+     */
     async _scaffold(projectRoot, repairMode) {
-        const dirsCreated = [];
         const filesCreated = [];
         // 1. Ensure root exists
         if (!fs.existsSync(projectRoot)) {
             fs.mkdirSync(projectRoot, { recursive: true });
         }
         // 2. Standard BDD directory structure
-        const dirs = ['features', 'pages', 'step-definitions', 'fixtures', 'models', 'test-data'];
-        for (const dir of dirs) {
-            const fullPath = path.join(projectRoot, dir);
-            if (!fs.existsSync(fullPath)) {
-                fs.mkdirSync(fullPath, { recursive: true });
-                dirsCreated.push(dir);
-            }
-        }
-        // 3. package.json with ALL required dependencies
-        const packageJsonPath = path.join(projectRoot, 'package.json');
-        if (!fs.existsSync(packageJsonPath)) {
-            const packageJson = {
-                name: path.basename(projectRoot),
-                version: '1.0.0',
-                type: 'module',
-                scripts: {
-                    'test': 'bddgen && playwright test',
-                    'test:smoke': 'bddgen && playwright test --grep @smoke',
-                    'test:regression': 'bddgen && playwright test --grep @regression',
-                    'test:e2e': 'bddgen && playwright test --grep @e2e',
-                    'test:headed': 'bddgen && playwright test --headed',
-                    'test:report': 'playwright show-report',
-                    'test:gen': 'npx bddgen',
-                    'lint': 'tsc --noEmit',
-                },
-                devDependencies: {
-                    // playwright-bdd includes @playwright/test as a peer — do NOT add @playwright/test separately
-                    // to package.json. However, standard Playwright APIs (test, expect, Page) should still 
-                    // be imported directly from @playwright/test in your source code.
-                    'playwright-bdd': '^7.0.0',
-                    // TypeScript
-                    'typescript': '^5.4.5',
-                    'ts-node': '^10.9.2',
-                    '@types/node': '^20.0.0',
-                    // Environment management
-                    'dotenv': '^16.4.5',
-                    // Accessibility testing
-                    '@axe-core/playwright': '^4.9.0',
-                    // Test data generation
-                    '@faker-js/faker': '^8.4.1',
-                }
-            };
-            fs.writeFileSync(packageJsonPath, JSON.stringify(packageJson, null, 2), 'utf-8');
+        const dirsCreated = this.scaffolder.scaffoldDirectories(projectRoot);
+        // 3. Baseline files
+        if (this.scaffolder.scaffoldPackageJson(projectRoot))
             filesCreated.push('package.json');
-        }
-        // 4. playwright.config.ts
-        const configPath = path.join(projectRoot, 'playwright.config.ts');
-        if (!fs.existsSync(configPath)) {
-            const configContent = [
-                "import 'dotenv/config';",
-                "import { defineConfig, devices } from '@playwright/test';",
-                "import { defineBddConfig } from 'playwright-bdd';",
-                "// @playwright/test is NOT in package.json as it is provided implicitly by playwright-bdd.",
-                "const testDir = defineBddConfig({",
-                "  featuresRoot: 'features',",
-                "  features: '**/*.feature',",
-                "  steps: 'step-definitions/**/*.ts',",
-                "});",
-                "",
-                "export default defineConfig({",
-                "  testDir,",
-                "  timeout: 30_000,",
-                "  retries: 1,",
-                "  reporter: [['html', { open: 'never' }], ['list']],",
-                "  use: {",
-                "    baseURL: process.env['BASE_URL'] ?? 'http://localhost:3000',",
-                "    headless: process.env['HEADLESS'] !== 'false',",
-                "    screenshot: 'only-on-failure',",
-                "    video: 'retain-on-failure',",
-                "    trace: 'retain-on-failure',",
-                "  },",
-                "  projects: [",
-                "    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },",
-                "    { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },",
-                "  ],",
-                "});",
-            ].join('\n');
-            fs.writeFileSync(configPath, configContent, 'utf-8');
+        if (this.scaffolder.scaffoldPlaywrightConfig(projectRoot))
             filesCreated.push('playwright.config.ts');
-        }
-        // 5. tsconfig.json
-        const tsconfigPath = path.join(projectRoot, 'tsconfig.json');
-        if (!fs.existsSync(tsconfigPath)) {
-            const tsconfig = {
-                compilerOptions: {
-                    module: 'NodeNext',
-                    target: 'ES2022',
-                    moduleResolution: 'NodeNext',
-                    strict: true,
-                    skipLibCheck: true,
-                    esModuleInterop: true,
-                    forceConsistentCasingInFileNames: true,
-                    resolveJsonModule: true,
-                },
-                include: ['**/*.ts'],
-                exclude: ['node_modules', 'dist', '.features-gen'],
-            };
-            fs.writeFileSync(tsconfigPath, JSON.stringify(tsconfig, null, 2), 'utf-8');
+        if (this.scaffolder.scaffoldTsConfig(projectRoot))
             filesCreated.push('tsconfig.json');
-        }
-        // 6. BasePage.ts (only if not present)
-        const basePagePath = path.join(projectRoot, 'pages', 'BasePage.ts');
-        if (!fs.existsSync(basePagePath)) {
-            const basePageContent = [
-                "// ─────────────────────────────────────────────────────────────────────",
-                "// BasePage — TestForge Standard Base Class",
-                "//",
-                "// PURPOSE (Token Efficiency + Synchronization)",
-                "// Instead of: await this.page.locator('button').click()",
-                "// Write:      await this.click(this.submitBtn)",
-                "//",
-                "// Every wrapper enforces human-like synchronization automatically:",
-                "//   scrollIntoViewIfNeeded → waitFor visible → action",
-                "// This prevents the #1 cause of flaky tests: acting before element is ready.",
-                "// ─────────────────────────────────────────────────────────────────────",
-                "import { Page, Locator, expect } from '@playwright/test';",
-                "import 'dotenv/config';",
-                "",
-                "export class BasePage {",
-                "  constructor(protected readonly page: Page) {}",
-                "",
-                "  // ── Navigation ────────────────────────────────────────────────────",
-                "",
-                "  protected async goto(url: string): Promise<void> {",
-                "    await this.page.goto(url, { waitUntil: 'domcontentloaded' });",
-                "  }",
-                "",
-                "  /** Wait for a named API response before continuing. */",
-                "  protected async waitForResponse(urlFragment: string, status = 200): Promise<void> {",
-                "    await this.page.waitForResponse(",
-                "      resp => resp.url().includes(urlFragment) && resp.status() === status",
-                "    );",
-                "  }",
-                "",
-                "  // ── Actions (human-simulated, synchronization built-in) ────────────",
-                "",
-                "  /**",
-                "   * Click with built-in scroll + visibility check.",
-                "   * Never use page.click(selector) or locator.click({ force: true }) directly.",
-                "   */",
-                "  protected async click(locator: Locator): Promise<void> {",
-                "    await locator.scrollIntoViewIfNeeded();",
-                "    await locator.waitFor({ state: 'visible' });",
-                "    await locator.click();",
-                "  }",
-                "",
-                "  /**",
-                "   * Fill a text input. Clears existing value before typing.",
-                "   */",
-                "  protected async fill(locator: Locator, value: string): Promise<void> {",
-                "    await locator.waitFor({ state: 'visible' });",
-                "    await locator.fill(value);",
-                "  }",
-                "",
-                "  /**",
-                "   * Select a dropdown option by visible label.",
-                "   */",
-                "  protected async selectOption(locator: Locator, label: string): Promise<void> {",
-                "    await locator.waitFor({ state: 'visible' });",
-                "    await locator.selectOption({ label });",
-                "  }",
-                "",
-                "  /**",
-                "   * Hover over an element (e.g. to reveal a dropdown menu).",
-                "   */",
-                "  protected async hover(locator: Locator): Promise<void> {",
-                "    await locator.scrollIntoViewIfNeeded();",
-                "    await locator.hover();",
-                "  }",
-                "",
-                "  // ── Assertions (convenience wrappers for common checks) ────────────",
-                "",
-                "  protected async expectVisible(locator: Locator): Promise<void> {",
-                "    await expect(locator).toBeVisible();",
-                "  }",
-                "",
-                "  protected async expectText(locator: Locator, text: string): Promise<void> {",
-                "    await expect(locator).toContainText(text);",
-                "  }",
-                "",
-                "  // ── Utilities ─────────────────────────────────────────────────────",
-                "",
-                "  /**",
-                "   * Wait for the page to finish its initial load (domcontentloaded).",
-                "   * Do NOT use networkidle — modern SPAs keep network active permanently.",
-                "   */",
-                "  async waitForStable(visibilityCheck?: Locator): Promise<void> {",
-                "    await this.page.waitForLoadState('domcontentloaded');",
-                "    if (visibilityCheck) await expect(visibilityCheck).toBeVisible();",
-                "  }",
-                "",
-                "  async closePopups(): Promise<void> {",
-                "    const candidates = [",
-                "      this.page.getByRole('button', { name: 'Close' }),",
-                "      this.page.locator('button.close').first(),",
-                "      this.page.locator('.modal-close').first(),",
-                "    ];",
-                "    for (const btn of candidates) {",
-                "      if (await btn.isVisible()) { await btn.click(); break; }",
-                "    }",
-                "  }",
-                "",
-                "  async navigate(url: string): Promise<void> {",
-                "    await this.goto(url);",
-                "    await this.waitForStable();",
-                "    await this.closePopups();",
-                "  }",
-                "",
-                "  async checkAccessibility(scanName = 'Page Scan'): Promise<void> {",
-                "    const { AxeBuilder } = await import('@axe-core/playwright');",
-                "    const results = await new AxeBuilder({ page: this.page })",
-                "      .withTags(['wcag2aa', 'wcag21aa', 'wcag2a'])",
-                "      .analyze();",
-                "    if (results.violations.length > 0) {",
-                "      console.error(`[A11Y] ${scanName}:`, results.violations.map(v => v.description));",
-                "    }",
-                "    expect(results.violations).toEqual([]);",
-                "  }",
-                "}",
-            ].join('\n');
-            fs.writeFileSync(basePagePath, basePageContent, 'utf-8');
+        if (this.scaffolder.scaffoldBasePage(projectRoot))
             filesCreated.push('pages/BasePage.ts');
-        }
-        // 7. .gitignore
-        const gitignorePath = path.join(projectRoot, '.gitignore');
-        if (!fs.existsSync(gitignorePath)) {
-            const content = [
-                'node_modules/',
-                'dist/',
-                '.features-gen/',
-                'test-results/',
-                'playwright-report/',
-                '*.env',
-                '.env.*',
-                '!.env.example',
-                'test-data/users.*.json',
-            ].join('\n');
-            fs.writeFileSync(gitignorePath, content, 'utf-8');
+        if (this.scaffolder.scaffoldPageSetup(projectRoot))
+            filesCreated.push('test-setup/page-setup.ts');
+        if (this.scaffolder.scaffoldGitIgnore(projectRoot))
             filesCreated.push('.gitignore');
-        }
-        // 8. Sample feature file
-        const sampleFeaturePath = path.join(projectRoot, 'features', 'sample.feature');
-        if (!fs.existsSync(sampleFeaturePath)) {
-            const featureContent = [
-                '@smoke',
-                'Feature: Sample Playwright BDD Test',
-                '',
-                '  Scenario: Verify page loads',
-                '    Given I navigate to the home page',
-                '    Then the page title should be visible',
-            ].join('\n');
-            fs.writeFileSync(sampleFeaturePath, featureContent, 'utf-8');
+        if (this.scaffolder.scaffoldSampleFeature(projectRoot))
             filesCreated.push('features/sample.feature');
-        }
-        // 9. Install if node_modules absent and NOT in repairMode
+        // 4. Install dependencies if needed
         let installed = false;
         const nodeModulesPath = path.join(projectRoot, 'node_modules');
         if (!fs.existsSync(nodeModulesPath) && !repairMode) {
-            try {
-                // TASK-48: Use execFile (not exec) to avoid shell interpretation of &&.
-                // Split into two sequential execFile calls instead of one && chain.
-                // TF-NEW-02: Wrap in networkCall retry — npm install fails transiently in CI.
-                await withRetry(() => execFileAsync(resolveExe('npm'), ['install'], {
-                    cwd: projectRoot,
-                    timeout: 180_000
-                }), RetryPolicies.networkCall);
-                await withRetry(() => execFileAsync(resolveExe('npx'), ['playwright', 'install', 'chromium', 'firefox', '--with-deps'], {
-                    cwd: projectRoot,
-                    timeout: 180_000
-                }), RetryPolicies.networkCall);
-                installed = true;
-            }
-            catch (e) {
-                installed = false;
-            }
+            installed = await this.dependencyManager.installDependencies(projectRoot);
         }
         else {
             installed = true;
         }
-        // 10. Scaffold .env files
+        // 5. Scaffold .env files
         const envEnvs = ['local', 'staging', 'prod'];
         const envResults = this.envManager.scaffoldMulti(projectRoot, envEnvs);
         const envScaffolded = envResults.some(r => r.written.length > 0);
-        const message = [
-            `\u2705 Project scaffolded at ${projectRoot}`,
+        const message = this.generateSummaryMessage(projectRoot, dirsCreated, filesCreated, installed, envScaffolded);
+        return { projectRoot, installed, dirsCreated, filesCreated, envScaffolded, message };
+    }
+    /**
+     * Delegates config schema syncing.
+     */
+    syncConfigSchema(projectRoot) {
+        return this.configManager.syncSchema(projectRoot);
+    }
+    /**
+     * Helper to generate the final summary message.
+     */
+    generateSummaryMessage(projectRoot, dirsCreated, filesCreated, installed, envScaffolded) {
+        return [
+            `✅ Project scaffolded at ${projectRoot}`,
             dirsCreated.length > 0 ? `\nDirectories created: ${dirsCreated.join(', ')}` : '',
             filesCreated.length > 0 ? `\nFiles created: ${filesCreated.join(', ')}` : '',
             installed
-                ? '\n\u2705 npm packages installed (Playwright + playwright-bdd + TypeScript + dotenv + faker)'
-                : '\n\u26a0\ufe0f Package install skipped (node_modules already present or install failed)',
-            envScaffolded ? '\n\u2705 .env scaffolded' : '\n~ .env already exists',
-            '\n\n\ud83d\ude80 NEXT STEPS:',
+                ? '\n✅ npm packages installed (Playwright + playwright-bdd + TypeScript + dotenv + faker)'
+                : '\n⚠️ Package install skipped (node_modules already present or install failed)',
+            envScaffolded ? '\n✅ .env scaffolded' : '\n~ .env already exists',
+            '\n\n🚀 NEXT STEPS:',
             '  1. Open .env and replace ***FILL_IN*** values.',
             '  2. Update BASE_URL in .env to your application URL.',
             '  3. Ask me to generate tests, or run: npm test',
         ].filter(Boolean).join('');
-        return { projectRoot, installed, dirsCreated, filesCreated, envScaffolded, message };
     }
-    syncConfigSchema(projectRoot) {
-        const logs = [];
-        const configPath = path.join(projectRoot, 'mcp-config.json');
-        if (!fs.existsSync(configPath))
-            return logs;
-        // Apply new config fields without overwriting custom edits
-        const raw = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        logs.push("✅ Schema synced and defaults applied without overwriting.");
-        const missingFeatures = [];
-        if (!raw.reporting)
-            missingFeatures.push('Reporters');
-        if (!fs.existsSync(path.join(projectRoot, 'test-data')))
-            missingFeatures.push('Credential files');
-        if (missingFeatures.length > 0) {
-            logs.push(`⚠️ Detected missing features: ${missingFeatures.join(', ')}. Run repair_project to install.`);
-        }
-        return logs;
-    }
-    generateConfigTemplate(projectRoot) {
-        const configPath = path.join(projectRoot, 'mcp-config.json');
-        const template = {
-            version: '2.4.0',
-            tags: ['CONFIGURE_ME: tag1', 'CONFIGURE_ME: tag2'],
-            envKeys: { baseUrl: 'BASE_URL' },
-            dirs: {
-                features: 'features',
-                pages: 'pages',
-                stepDefinitions: 'step-definitions',
-                testData: 'test-data',
-            },
-            browsers: ['chromium'],
-            timeouts: {
-                testRun: 120_000,
-                sessionStart: 30000,
-                healingMax: 3
-            },
-            retries: 1,
-            backgroundBlockThreshold: 3,
-            authStrategy: 'users-json',
-            currentEnvironment: 'CONFIGURE_ME: e.g. staging',
-            environments: ['local', 'staging', 'prod'],
-            waitStrategy: 'domcontentloaded',
-            architectureNotesPath: 'docs/mcp-architecture-notes.md',
-            additionalDataPaths: [],
-            a11yStandards: ['wcag2aa'],
-            a11yReportPath: 'test-results/a11y-report.json',
-            projectRoot: projectRoot
-        };
-        fs.writeFileSync(configPath, JSON.stringify(template, null, 2), 'utf-8');
-        return configPath;
-    }
-    scaffoldMcpConfigReference(projectRoot) {
-        const docsDir = path.join(projectRoot, 'docs');
-        if (!fs.existsSync(docsDir)) {
-            fs.mkdirSync(docsDir, { recursive: true });
-        }
-        const sourceDoc = path.join(__dirname, '../../docs/technical/MCP_CONFIG_REFERENCE.md');
-        const targetDoc = path.join(projectRoot, 'docs/MCP_CONFIG_REFERENCE.md');
-        if (fs.existsSync(sourceDoc)) {
-            fs.copyFileSync(sourceDoc, targetDoc);
-        }
-        else {
-            const content = [
-                '# MCP Config Reference — TestForge',
-                '',
-                'See the full documentation at: https://github.com/ForgeTest-AI/TestForge/blob/main/docs/technical/MCP_CONFIG_REFERENCE.md',
-            ].join('\n');
-            fs.writeFileSync(targetDoc, content, 'utf-8');
-        }
-    }
-    scaffoldPromptCheatbook(projectRoot) {
-        const docsDir = path.join(projectRoot, 'docs');
-        if (!fs.existsSync(docsDir)) {
-            fs.mkdirSync(docsDir, { recursive: true });
-        }
-        const sourceDoc = path.join(__dirname, '../../docs/user/PROMPT_CHEATBOOK.md');
-        const targetDoc = path.join(projectRoot, 'docs/PROMPT_CHEATBOOK.md');
-        if (fs.existsSync(sourceDoc)) {
-            fs.copyFileSync(sourceDoc, targetDoc);
-        }
-        else {
-            const content = [
-                '# Prompt Cheatbook — TestForge',
-                '',
-                'See the full cheatbook at: https://github.com/ForgeTest-AI/TestForge/blob/main/docs/user/PROMPT_CHEATBOOK.md',
-            ].join('\n');
-            fs.writeFileSync(targetDoc, content, 'utf-8');
-        }
-    }
-    scanConfigureMe(projectRoot) {
-        const configPath = path.join(projectRoot, 'mcp-config.json');
-        if (!fs.existsSync(configPath))
-            return [];
-        const content = fs.readFileSync(configPath, 'utf-8');
-        const unconfigured = [];
-        const lines = content.split('\n');
-        for (const line of lines) {
-            if (line.includes('"CONFIGURE_ME')) {
-                const match = line.match(/"([^"]+)":\s*"CONFIGURE_ME/);
-                if (match && match[1])
-                    unconfigured.push(match[1]);
-            }
-        }
-        return unconfigured;
-    }
+    // Delegate-only methods for CLI-level access if needed
+    generateConfigTemplate(projectRoot) { return this.configManager.generateTemplate(projectRoot); }
+    scaffoldMcpConfigReference(projectRoot) { return this.docScaffolder.scaffoldReference(projectRoot); }
+    scaffoldPromptCheatbook(projectRoot) { return this.docScaffolder.scaffoldPromptCheatbook(projectRoot); }
+    scanConfigureMe(projectRoot) { return this.configManager.scanConfigureMe(projectRoot); }
 }
 //# sourceMappingURL=ProjectSetupService.js.map

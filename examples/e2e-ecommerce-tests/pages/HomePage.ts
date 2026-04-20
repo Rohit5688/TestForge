@@ -1,23 +1,15 @@
-import 'dotenv/config';
-import { Page, Locator } from '@playwright/test';
-import { BasePage } from './BasePage';
+import { BasePage } from './BasePage.js';
 
 export class HomePage extends BasePage {
-  readonly searchInput: Locator;
-  readonly searchBtn: Locator;
+  private get searchBox() { return this.page.getByRole('textbox', { name: 'Search For Products' }).first(); }
+  private get searchBtn() { return this.page.getByRole('button', { name: 'Search' }).first(); }
 
-  constructor(page: Page) {
-    super(page);
-    this.searchInput = page.getByPlaceholder("Search For Products");
-    this.searchBtn = page.getByRole("button", { name: "Search" });
+  async open() {
+    await this.navigate(process.env.LAMBDATEST_ECOM_URL || 'https://ecommerce-playground.lambdatest.io/');
   }
 
-  async navigateHome() {
-    await this.navigate(process.env.BASE_URL || "https://ecommerce-playground.lambdatest.io/");
-  }
-
-  async searchProduct(term: string) {
-    await this.fill(this.searchInput, term);
+  async search(product: string) {
+    await this.fill(this.searchBox, product);
     await this.click(this.searchBtn);
     await this.waitForStable();
   }

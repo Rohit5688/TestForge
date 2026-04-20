@@ -204,6 +204,30 @@ function deriveSelector(node: A11yNode): {
   return null;
 }
 
+function isDecorativeContainer(node: A11yNode): boolean {
+  const role = (node.role ?? '').toLowerCase();
+  const name = (node.name ?? '').toLowerCase();
+  
+  // Skip footer/aside containers with >10 nested children (likely decorative)
+  if ((role === 'contentinfo' || role === 'complementary') && 
+      (node.children?.length ?? 0) > 10) {
+    return true;
+  }
+  
+  // Skip navigation containers that only have links (user already sees nav in UI)
+  if (role === 'navigation' && (node.children?.length ?? 0) > 0 && node.children?.every(c => c.role === 'link')) {
+    return true;
+  }
+  
+  // Skip "powered by" / copyright / social link clusters
+  if (name.includes('copyright') || name.includes('powered by') || 
+      name.includes('follow us') || name.includes('social')) {
+    return true;
+  }
+  
+  return false;
+}
+
 function collectNodes(node: A11yNode, results: ActionableElement[], depth: number): void {
   if (results.length >= MAX_NODES) return;
   if (!node || typeof node !== 'object') return;
@@ -211,6 +235,8 @@ function collectNodes(node: A11yNode, results: ActionableElement[], depth: numbe
   const role = (node.role ?? '').toLowerCase();
 
   if (SKIP_ROLES.has(role)) return;
+
+  if (isDecorativeContainer(node)) return;
 
   if (ACTIONABLE_ROLES.has(role)) {
     const sel = deriveSelector(node);
@@ -471,6 +497,12 @@ export class SmartDomExtractor {
       const name = (m[2] ?? m[3] ?? '').trim();
 
       if (SKIP_ROLES.has(role)) continue;
+      
+      const lowerName = name.toLowerCase();
+      if (lowerName.includes('copyright') || lowerName.includes('powered by') || 
+          lowerName.includes('follow us') || lowerName.includes('social')) {
+        continue;
+      }
 
       // CLAUDE-REC-1: Emit Playwright API strings, not raw selector syntax
       let selector: string;

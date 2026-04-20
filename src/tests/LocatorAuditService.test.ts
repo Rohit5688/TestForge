@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs/promises';
-import { LocatorAuditService } from '../services/LocatorAuditService.js';
+import { LocatorAuditService } from '../services/audit/LocatorAuditService.js';
 
 describe('LocatorAuditService (TestForge Unit Tests)', () => {
   let auditService: LocatorAuditService;

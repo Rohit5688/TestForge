@@ -72,4 +72,79 @@ export class ASTScrutinizer {
       }
     }
   }
+
+  public static hasClassLocatorsFast(content: string): boolean {
+    return content.includes('page.locator') || content.includes('page.getBy') || content.includes('page.$') || content.includes('page.goto');
+  }
+
+  /**
+   * Enhanced AST-based method extraction for TypeScript classes using ts-morph.
+   * For .d.ts files, also uses regex fallback to extract `export declare function` patterns.
+   */
+  public static extractPublicMethods(content: string): string[] {
+    const methods: string[] = [];
+    
+    // Regex fallback for .d.ts files: extract `export declare function functionName(`
+    const declareMatches = content.matchAll(/export\s+declare\s+function\s+(\w+)\s*\(/g);
+    for (const match of declareMatches) {
+      if (match[1]) methods.push(match[1] + '()');
+    }
+    
+    // If we found methods via regex (common for .d.ts), return them
+    if (methods.length > 0) {
+      return [...new Set(methods)];
+    }
+    
+    // Otherwise, use ts-morph for source files
+    try {
+      const project = new Project({ compilerOptions: { strict: false }, skipAddingFilesFromTsConfig: true });
+      const sourceFile = project.createSourceFile('temp.ts', content);
+
+      for (const cls of sourceFile.getClasses()) {
+        const publicMethods = cls.getMethods()
+          .filter(m => !m.hasModifier(SyntaxKind.PrivateKeyword) && !m.hasModifier(SyntaxKind.ProtectedKeyword))
+          .map(m => m.getName() + '()');
+        methods.push(...publicMethods);
+      }
+      
+      for (const varDecl of sourceFile.getVariableDeclarations()) {
+        const initializer = varDecl.getInitializer();
+        if (initializer && Node.isObjectLiteralExpression(initializer)) {
+          for (const prop of initializer.getProperties()) {
+            if (Node.isMethodDeclaration(prop)) {
+              methods.push(prop.getName() + '()');
+            } else if (Node.isPropertyAssignment(prop)) {
+              const propInit = prop.getInitializer();
+              if (propInit && (Node.isArrowFunction(propInit) || Node.isFunctionExpression(propInit))) {
+                methods.push(prop.getName() + '()');
+              }
+            }
+          }
+        }
+      }
+      
+      for (const fn of sourceFile.getFunctions()) {
+        if (fn.isExported()) {
+          methods.push(fn.getName() + '()');
+        }
+      }
+
+      return [...new Set(methods)];
+    } catch (e) {
+      return [...new Set(methods)]; // Return regex matches if ts-morph fails
+    }
+  }
+
+  /**
+   * Extracts BDD step patterns from file content (Given, When, Then).
+   */
+  public static extractSteps(fileContent: string): string[] {
+    const steps: string[] = [];
+    const stepRegex = /(?:Given|When|Then|Step)\s*\(\s*['"`](.*?)['"`]/g;
+    let match;
+    while ((match = stepRegex.exec(fileContent)) !== null) {
+      if (match[1]) steps.push(match[1]);
+    }
+    return steps;
+  }
 }

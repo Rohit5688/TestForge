@@ -12,7 +12,7 @@ export class TestGenerationService {
         const cfg = analysisResult.mcpConfig;
         const allowedTags = cfg?.allowedTags ?? ['@smoke', '@regression', '@e2e'];
         const bgThreshold = cfg?.backgroundBlockThreshold ?? 3;
-        const waitStrategy = cfg?.waitStrategy ?? 'networkidle';
+        const waitStrategy = cfg?.waitStrategy ?? 'domcontentloaded';
         const authStrategy = cfg?.authStrategy ?? 'users-json';
         const archNotesPath = cfg?.architectureNotesPath ?? 'docs/mcp-architecture-notes.md';
         // Item 11: Read Architecture Notes if exists
@@ -33,9 +33,9 @@ export class TestGenerationService {
         }
         // Build user context when users-json auth is configured
         const userRoles = analysisResult.userRoles;
-        const userContext = (authStrategy === 'users-json' && userRoles && userRoles.roles.length > 0)
+        const userContext = (authStrategy === 'users-json' && userRoles && (userRoles.roles?.length ?? 0) > 0)
             ? `\n--- Multi-User Credential Store (users-json strategy, env: ${userRoles.environment}) ---\n` +
-                `Available roles: ${userRoles.roles.join(', ')}\n` +
+                `Available roles: ${userRoles.roles?.join(', ') || 'N/A'}\n` +
                 `Helper import: ${userRoles.helperImport}\n` +
                 `Usage in Page Object methods: const { username, password } = getUser('<role>');\n` +
                 `NEVER use process.env.USERNAME or process.env.PASSWORD — always use getUser() instead.`
@@ -106,6 +106,13 @@ export class TestGenerationService {
 
    Direct \`this.page.*\` calls are ONLY allowed for: \`this.page.getByRole()\`, \`this.page.getByTestId()\`, \`this.page.context()\`, \`this.page.route()\`, \`this.page.waitForResponse()\` (inside \`Promise.all\`), multi-tab handling.`
             : `6. **Page Class Extension**: No \`BasePage\` detected. Export a plain class with \`constructor(protected readonly page: Page) {}\`. All Playwright calls go through \`this.page.*\` directly.`;
+        const customWrapperPkg = analysisResult.customWrapper?.package || 'vasu-playwright-utils';
+        const detectedUtils = analysisResult.customWrapper?.detectedMethods && analysisResult.customWrapper.detectedMethods.length > 0
+            ? analysisResult.customWrapper.detectedMethods.map(m => m.replace('()', '')).join(', ')
+            : 'getPage, getRequest, executeStep';
+        const customWrapperRule = analysisResult.customWrapper?.isInstalled
+            ? `\n    - ⚡ **UTILITY AWARENESS (CRITICAL)**: The library \`${customWrapperPkg}\` provides these utilities: [ ${detectedUtils} ].\n      You MUST import and use these functions (e.g., \`import { utilityName } from '${customWrapperPkg}';\`) instead of writing custom TypeScript or native Playwright logic for these actions.`
+            : '';
         // ── DOM JSON CONTEXT BLOCK ──────────────────────────────────────────────
         // When inspect_page_dom was called with returnFormat:'json', the caller may
         // pass the structured element list here. This gives the LLM explicit field
@@ -137,13 +144,13 @@ RULES for using the above:
         }
         // ── END DOM JSON CONTEXT BLOCK ──────────────────────────────────────────
         // --- VERIFIED DOM CONTEXT (from gather_test_context) ---
-        if (testContext && testContext.version === '1' && testContext.pages.length > 0) {
+        if (testContext && testContext.version === '1' && Array.isArray(testContext.pages) && testContext.pages.length > 0) {
             const pageBlocks = testContext.pages.map(p => {
-                const elemLines = p.elements.map(e => {
+                const elemLines = (Array.isArray(p.elements) ? p.elements : []).map(e => {
                     const typeHint = e.inputType ? ` (${e.inputType})` : '';
                     return `  - ${e.role} "${e.name}": ${e.locator}${typeHint}`;
                 }).join('\n');
-                const netLines = p.networkOnLoad.length > 0
+                const netLines = Array.isArray(p.networkOnLoad) && p.networkOnLoad.length > 0
                     ? p.networkOnLoad.map(n => `  - ${n.method} ${n.urlPath} → ${n.status}`).join('\n')
                     : '  (none)';
                 return `Page: ${p.title} (${p.resolvedUrl})\nActionable elements:\n${elemLines}\nNetwork calls on load:\n${netLines}`;
@@ -154,7 +161,7 @@ RULES for using the above:
                 `before the action that triggers it. Do NOT use waitForLoadState('networkidle').\n\n` +
                 pageBlocks;
         }
-        else if (!testContext) {
+        else if (!testContext && !domJsonContext) {
             memoryPrompt += `\n\n## ⚠️ DOM CONTEXT MISSING — MANDATORY PRE-FLIGHT REQUIRED\n` +
                 `You do NOT have verified DOM data. BEFORE calling validate_and_write, call gather_test_context with:\n` +
                 `  baseUrl: "${baseUrl ?? '<the app base URL>'}"\n` +
@@ -191,7 +198,8 @@ ${basePageRule}
 8. Data-Driven Testing: Default to generating Gherkin \`Scenario Outline:\` with an \`Examples:\` data table when dealing with user inputs, rather than hardcoding static data inside the steps.
 9. Strict Assertions: Every \`Then\` step MUST contain at least one valid assertion (via wrapper or Playwright \`expect\`) verifying a visible DOM state. URL assertions alone are insufficient.
 10. Page Transitions & Navigation: If a method triggers a page transition, it MUST end by calling \`await this.waitForStable()\` (BasePage helper) OR asserting a unique element on the following page. Do NOT call \`this.page.waitForLoadState()\` directly in Page Objects that extend BasePage.
-11. Complex Interactions (Mouse/Keyboard): For actions like drag-and-drop or hover, use Playwright's native APIs (e.g., \`await this.page.dragAndDrop()\`) UNLESS the Custom Wrapper provides an abstraction for it. NEVER use raw \`page.evaluate()\` unless natively unsupported.
+11. Complex Interactions (Mouse/Keyboard): For actions like drag-and-drop or hover, use Playwright's native APIs (e.g., \`await this.page.dragAndDrop()\`) UNLESS the Custom Wrapper provides an abstraction for it.
+    🚫 **FORCE HAMMER BAN (Critical):** NEVER use \`force: true\` on any click or interaction that represents a primary user action. NEVER use \`.evaluate(el => el.click())\` or \`.evaluate(el => el.dispatchEvent(...))\` as a workaround for a blocked element. These bypass Playwright's actionability checks and mask real synchronization bugs or genuine UI defects that a real user would encounter. If an element is obscured by an overlay, the ONLY correct fix is: \`await expect(overlay).toBeHidden()\` BEFORE the click. Playwright automatically scrolls elements into view before clicking — manual \`scrollIntoViewIfNeeded()\` as a pre-click ritual is also a smell of incorrect interaction timing.
 12. Background Steps: If ${bgThreshold} or more Scenarios in a feature share the same first \`Given\` step (e.g., navigation to a URL or login), extract it into a Gherkin \`Background:\` block. Never repeat the same step in every scenario when a Background can be used.
 13. Test Tags: Every \`Scenario\` or \`Scenario Outline\` MUST be tagged with at least one of: ${allowedTags.map(t => `\`${t}\``).join(', ')}. Use this logic:
     - Login, homepage, critical navigation = first tag in the list
@@ -199,14 +207,20 @@ ${basePageRule}
     - Full end-to-end user journeys = last tag in the list
     Tags must appear on the line directly above \`Scenario:\` or \`Scenario Outline:\`.
 ${dotenvImportRule}
-15. Page Load Waits: After any navigation, call \`await this.waitForStable()\` (if extending BasePage) or \`await this.page.waitForLoadState('${waitStrategy}')\`. NEVER use \`waitForLoadState('networkidle')\` — modern SPAs are chatty by design and this will time out.
+15. Page Load Waits & State Transitions: After any navigation, call \`await this.waitForStable()\` (if extending BasePage) or \`await this.page.waitForLoadState('${waitStrategy}')\`. NEVER use \`waitForLoadState('networkidle')\` — modern SPAs maintain persistent connections and it will time out or produce flaky results.
+    🚫 **WEB-FIRST ASSERTION MANDATE:** Do NOT rely on \`page.title()\`, \`page.url()\`, or \`waitForLoadState\` to verify that a new screen has loaded after an action. You MUST assert a unique structural element on the target page: \`await expect(page.locator('.product-grid-item').first()).toBeVisible()\`. This is the only reliable signal that the page has hydrated in a SPA. URL/title checks are acceptable for supplementary assertions ONLY — they are FORBIDDEN as primary state-transition guards.
 16. Multi-Tab Interactions: If an action opens a new browser tab, you MUST use \`const [newPage] = await Promise.all([this.page.context().waitForEvent('page'), <action>])\`. Pass this \`newPage\` to subsequent Page Objects instead of the original page. To return to the main window, use \`await this.page.bringToFront()\` and resume using the original page object.
 17. API Interception & Capturing: For mocking APIs, use \`await this.page.route('**/endpoint', ...)\` BEFORE the action. For capturing API responses, use \`const [response] = await Promise.all([this.page.waitForResponse('**/api/*'), actionThatTriggersIt()]);\` to prevent race conditions. Share captured data across steps using module-level variables.
 18. Mid-Test HTTP & Auth: For pure API calls, extract the \`request\` fixture (\`async ({ page, request }) => {...}\`).
     - **Payloads**: NEVER hardcode massive JSON bodies in Gherkin text. If the user step says \`using payload "fixtures/file.json"\`, you MUST extract the body using \`JSON.parse(fs.readFileSync(path, 'utf8'))\` dynamically inside the step definition.
     - **Authentication**: NEVER hardcode API tokens or secrets in Gherkin. If the step mentions "Bearer token", "Basic auth", etc., construct the \`Authorization\` header dynamically in the step definition using \`process.env\` variables (e.g., \`Authorization: Bearer \${process.env.API_TOKEN}\`).
 19. TypeScript DTOs & Models: If handling complex API JSON payloads/responses, or if the user requests strong typing, NEVER use implicit \`any\`. You MUST generate a TypeScript \`export interface ...\` file representing the data shape and save it in the \`models/\` directory.
-20. Step-Level Context & Fixtures: You MUST use the native Playwright-BDD destructuring (\`async ({ page, myPage }) => { ... }\`) within EVERY step definition. NEVER store the \`page\` object in a module-level variable or class constructor that persists across steps.
+20. Step-Level Context & Singleton Pattern: This project uses \`${customWrapperPkg}\` with a singleton page store. You MUST follow the singleton pattern EVERYWHERE:
+    - Step definitions use \`async () => {}\` — NO fixture destructuring (\`async ({ page }) ...\` is BANNED in step bodies).
+    - Page Objects instantiate with NO args: \`const homePage = new HomePage();\` — NEVER \`new HomePage(page)\`.
+    - Inside Page Objects, the page is accessed via \`this.page\` (which calls \`getPage()\` from the BasePage getter).
+    - For API calls from steps: \`import { getRequest } from '${customWrapperPkg}'; const req = getRequest();\`
+    - \`getPage()\`/\`getRequest()\` are pre-wired before each scenario by \`test-setup/page-setup.ts\` — always available.${customWrapperRule}
 21. Spec File Guard: You are EXPLICITLY FORBIDDEN from generating or modifying any \`.spec.ts\` files (e.g., those in \`.features-gen/\`). These files are managed by the \`npx bddgen\` command.
 22. Advanced Page Stability: Before taking any screenshot or performing an action after a tab switch/navigation, you MUST inject logic to verify the page is fully loaded.
 23. Ad & Popup Interception: If the test description implies a public-facing site with intrusive ads/popups, include a shared utility method to identify and close common overlays before proceeding.
@@ -223,22 +237,48 @@ ${dotenvImportRule}
     - ✅ Use \`jsonSteps\` instead of writing raw TypeScript in \`files[]\` for step definitions (saves ~70% output tokens)
     - ✅ Use \`jsonPageObjects\` for ALL Page Objects (already required by Rule 30)
     - ✅ The \`explanation\` field is the ONLY place for natural language — keep it to 1-2 sentences
+32. **[E2E JOURNEY INTEGRITY — Critical]:** NEVER use \`page.goto()\` as a fallback inside a test step when a UI interaction fails. If a drawer, modal, or button is blocked or fails to open, the ONLY correct response is to wait for the blocking overlay to clear (\`await expect(overlay).toBeHidden()\`) and retry the interaction. Using \`page.goto('/cart')\` to skip a failed UI element creates a **False Positive** — the test passes but the feature is broken for real users. Direct URL navigation via \`page.goto()\` is permitted ONLY for the initial application entry point in a \`Given\` step.
+33. **[STRICT-MODE RESOLUTION — Critical]:** When Playwright throws a strict-mode violation ("resolved to N elements"), NEVER suppress it with \`.first()\`. Using \`.first()\` silently targets an unseen element (e.g., a hidden mobile navbar) and breaks on viewport changes. The ONLY correct resolution strategies are:
+    - **Container scoping:** \`page.locator('nav').getByRole('searchbox')\` — scope to the visible parent container.
+    - **Visibility filter:** \`page.getByRole('searchbox').filter({ visible: true })\` — explicitly require visibility.
+    - **Named locator:** Add a \`{ name: '...' }\` option to \`getByRole\` to disambiguate semantically (e.g., \`getByRole('button', { name: 'Add to Cart' })\`).
+34. **[TYPESCRIPT COMPILATION SAFETY — Critical]:** You MUST write syntactically valid TypeScript. The MCP server runs \`tsc --noEmit\` on your generated \`jsonPageObjects\`. To prevent compilation failures:
+    - ALWAYS declare class properties inside your \`jsonPageObjects.locators\` array before using them in \`methods\`.
+    - NEVER call \`this.someLocator\` inside \`methods\` if you did NOT define \`someLocator\` in \`locators\`.
+    - Ensure all imported types/interfaces exist and use \`any\` as a last resort ONLY if the type is unknown.
+    - If your generated \`validate_and_write\` fails with a TypeScript error, you MUST read the error and try again, fixing the undefined variable or syntax error.
+
 
 ${memoryPrompt}
 
 ${locatorSourceSection}
 
 --- PLAYWRIGHT-BDD SPECIFIC RULES ---
-- Step definitions MUST be defined using \`playwright-bdd\`, not standard Cucumber:
+- Step definitions MUST be defined using \`playwright-bdd\` + the project's extended \`test\` object:
   \`\`\`typescript
   import { createBdd } from 'playwright-bdd';
-  const { Given, When, Then } = createBdd();
+  import { test } from '../test-setup/page-setup.js';
+  const { Given, When, Then } = createBdd(test);
   \`\`\`
-- CRITICAL: \`createBdd()\` takes NO arguments. NEVER write \`createBdd(test)\` — this is a common mistake that causes a runtime error.
-- Standard Playwright APIs (expect, Page, Locator, etc.) MUST be imported from \`@playwright/test\`. Fixtures (\`page\`, custom fixtures) are injected via step destructuring: \`async ({ page, myPage }) => {}\`.
-- NEVER import \`test\` or \`expect\` from \`playwright-bdd\` — they belong to \`@playwright/test\`, which is installed implicitly by \`playwright-bdd\`.
+- CRITICAL: \`createBdd(test)\` takes the exported \`test\` from \`test-setup/page-setup.ts\` as its argument.
+  This is what connects the \`autoSetup\` fixture (which calls \`setPage(page)\`) to every step.
+  NEVER write \`createBdd()\` with no argument — steps will lack the singleton wiring.
+- Standard Playwright APIs (expect, Locator, etc.) MUST be imported from \`@playwright/test\`.
+- NEVER destructure \`{ page }\` in a step body — the singleton is already set by the fixture.
+  \`\`\`typescript
+  // ✅ CORRECT
+  Given('I navigate to home', async () => {
+    const home = new HomePage();
+    await home.navigate('/');
+  });
+  // ❌ WRONG — do not inject page via fixture destructuring
+  Given('I navigate to home', async ({ page }) => {
+    await page.goto('/');
+  });
+  \`\`\`
+- NEVER import \`test\` or \`expect\` from \`playwright-bdd\` — \`expect\` belongs to \`@playwright/test\`.
 - Do NOT import from \`@cucumber/cucumber\`.
-- In your explanation string, remind the user that they must run \`npm test\` to generate the test files and execute them.
+- In your explanation string, remind the user to run \`npm test\` to generate and execute the tests.
 
 30. **[CRITICAL: ONE CLASS PER FILE — NEVER MONOLITHIC]**: You MUST generate a SEPARATE \`jsonPageObjects\` entry for EACH distinct page or screen in the test flow. NEVER combine multiple pages into a single Page Object class or a single file.
     - ❌ WRONG: One \`EcommercePage\` class with methods for Home, Product, Cart, Checkout
@@ -300,7 +340,6 @@ IMPORTANT: If the test flow visits N distinct pages/screens, the \`jsonPageObjec
       ]
     }
   ],
-  "setupRequired": ${!analysisResult.bddSetup.present},
   "setupRequired": ${!analysisResult.bddSetup.present},
   "jsonSteps": [
     {

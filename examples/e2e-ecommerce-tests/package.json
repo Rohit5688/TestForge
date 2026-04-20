@@ -13,7 +13,9 @@
     "lint": "tsc --noEmit"
   },
   "devDependencies": {
-    "playwright-bdd": "^7.0.0",
+    "playwright-bdd": "^8.5.0",
+    "@playwright/test": "^1.59.1",
+    "vasu-playwright-utils": "^1.25.0",
     "typescript": "^5.4.5",
     "ts-node": "^10.9.2",
     "@types/node": "^20.0.0",

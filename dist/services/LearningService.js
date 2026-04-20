@@ -1,5 +1,27 @@
 import fs from 'fs';
 import path from 'path';
+const DEFAULT_RULES = [
+    {
+        id: 'structural-sibling-legacy-sites',
+        pattern: 'Input field with no data-test or ID on legacy sites',
+        solution: `Use structural sibling selector: page.locator('p:has-text("Label Text") + input')`,
+        rationale: 'Legacy sites (LambdaTest, older enterprise apps) often lack test IDs. The label-to-input DOM structure is more stable than element IDs which can be auto-generated.',
+        antiPatterns: ['Do not use #result-id or #confirm-msg — these are brittle auto-generated IDs'],
+        tags: ['legacy', 'no-testid', 'structural'],
+        scope: 'global',
+        timestamp: '2025-01-01T00:00:00Z'
+    },
+    {
+        id: 'detached-dom-resilience',
+        pattern: 'Elements disappear or detach during interaction on dynamic pages',
+        solution: `Add 100ms layout delay before clicking: await this.page.waitForTimeout(100); await locator.click();`,
+        rationale: 'Pages with aggressive re-rendering (LambdaTest Simple Form Demo) can detach elements between resolution and click. A short delay allows the layout to settle.',
+        antiPatterns: ['Do not use waitForLoadState("networkidle") — modern SPAs keep persistent connections'],
+        tags: ['dynamic', 'detached-dom', 'timing'],
+        scope: 'global',
+        timestamp: '2025-01-01T00:00:00Z'
+    }
+];
 export class LearningService {
     /**
      * Defines the storage location for the autonomous learning brain inside the user's project.
@@ -17,7 +39,9 @@ export class LearningService {
     getKnowledge(projectRoot) {
         const storagePath = this.getStoragePath(projectRoot);
         if (!fs.existsSync(storagePath)) {
-            return { version: '1.0.0', rules: [] };
+            const initialKnowledge = { version: '1.0.0', rules: DEFAULT_RULES };
+            fs.writeFileSync(storagePath, JSON.stringify(initialKnowledge, null, 2), 'utf8');
+            return initialKnowledge;
         }
         try {
             return JSON.parse(fs.readFileSync(storagePath, 'utf8'));

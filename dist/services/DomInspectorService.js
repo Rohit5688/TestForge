@@ -94,14 +94,31 @@ export class DomInspectorService {
                     }
                 }
             }
-            const rawJson = JSON.stringify(result, null, 2);
+            let safeResult;
+            try {
+                const v8 = require('v8');
+                safeResult = v8.deserialize(v8.serialize(result));
+            }
+            catch (e) {
+                safeResult = result;
+            }
+            const rawJson = JSON.stringify(safeResult, (key, value) => {
+                if (value instanceof Error)
+                    return { message: value.message, name: value.name };
+                return value;
+            }, 2);
             // Branch on returnFormat: 'json' → flat JsonElement[] (custom-wrapper friendly)
             //                          'markdown' (default) → pruned Actionable Markdown
             if (returnFormat === 'json') {
                 return SmartDomExtractor.extractAsJson(rawJson, url);
             }
             // TASK-62: transform raw AOM JSON → pruned Actionable Markdown
-            return SmartDomExtractor.extract(rawJson, url, screenshotPath);
+            let markdown = SmartDomExtractor.extract(rawJson, url, screenshotPath);
+            const estimatedTokens = Math.ceil(markdown.length / 4);
+            if (estimatedTokens > 3000) {
+                markdown = `⚠️ **Token Budget Warning**: This page output is extremely large (~${estimatedTokens} tokens). Consider using returnFormat:'json' for more compact output, or add a selector filter to inspect only a specific region.\n\n` + markdown;
+            }
+            return markdown;
         }
         catch (error) {
             // --- 18A FIX: Friendly, actionable error messages ---

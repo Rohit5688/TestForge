@@ -1,34 +1,30 @@
-Feature: E-Commerce Navigation & Checkout
-  As a customer
-  I want to be able to search for products and complete a guest checkout
-  So that I can purchase items efficiently even if some are out of stock
+@saucedemo @ecommerce
+Feature: SauceDemo E2E Flow
 
   Background:
-    Given I am on the home page
+    Given I am on the SauceDemo login page
+    And I log in as a standard user
 
-  @ecommerce @lambdatest @smoke
-  Scenario: Search and Purchase In-Stock Product
-    When I search for "iMac"
-    And I select the product "iMac"
-    And I add the product to the cart
-    And I proceed to checkout from the cart
-    And I complete the guest checkout with details:
-      | firstName | lastName | email            | telephone  | address1     | city   | postcode | country        | zone      |
-      | John      | Doe      | john@example.com | 1234567890 | 123 Test St | London | E1 6AN   | United Kingdom | Middlesex |
-    Then I should see the order confirmation
+  Scenario: Happy Path Checkout
+    When I select the product "Sauce Labs Backpack"
+    And I verify it is in stock and add it to the cart
+    And I go to the shopping cart
+    Then I should see the product "Sauce Labs Backpack" in the cart
+    When I proceed to checkout
+    And I fill checkout information with "Rohit", "Kumar", "123456"
+    And I finish the checkout
+    Then I should see a success message
 
-  @ecommerce @lambdatest @dynamic
-  Scenario: Dynamic Fallback for Out-of-Stock Product
-    When I search for "Palm Treo Pro"
-    And I select the product "Palm Treo Pro"
-    But the product is "Out of Stock"
-    Then I should go back and pick the next in-stock product
-    And I should be able to add it to the cart
+  Scenario: Dynamic Fallback Out of Stock
+    When I select the product "Sauce Labs Onesie"
+    And I check the product availability
+    And I fallback to the second product "Sauce Labs Bike Light" if unavailable
+    And I go to the shopping cart
+    Then I should see the product "Sauce Labs Bike Light" in the cart
+    When I fill checkout information and finish successfully
 
-  @ecommerce @lambdatest @negative
-  Scenario: Negative Checkout - Missing Information
-    When I search for "iMac"
-    And I add the product to the cart
-    And I proceed to checkout from the cart
-    And I attempt to continue without filling details
-    Then I should see validation errors for required fields
+  Scenario: Negative Checkout
+    When I select the product "Sauce Labs Backpack"
+    And I add it to the cart and go to checkout
+    And I leave First Name empty and click continue
+    Then I should see a validation error "Error: First Name is required"

@@ -40,6 +40,10 @@ export interface PageContext {
   elements: PageElement[];
   /** XHR/fetch calls that fired during page load — basis for waitForResponse() calls */
   networkOnLoad: NetworkCall[];
+  /** Optional warning message if the page load timed out or partially failed */
+  warning?: string;
+  /** True if the page load timed out or failed, meaning elements/network calls may be incomplete */
+  partialData?: boolean;
 }
 
 export interface TestContext {

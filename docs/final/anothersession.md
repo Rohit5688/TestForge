@@ -12,7 +12,7 @@ You are an autonomous Lead QA Automation Engineer. You have been granted access 
 
 # THE MISSION: Dynamic E-Commerce End-to-End Flow
 
-You are tasked with automating a 5-page BDD (Behavior Driven Development) test flow for an e-commerce website lambdatest playground
+You are tasked with automating a 5-page BDD (Behavior Driven Development) test flow for an e-commerce website (https://ecommerce-playground.lambdatest.io/). Login+add item to cart,+ go to cart and validate what item is added, complete checkout infor with filling Firatname, latname and pincode and go till success page.
 
 ## 🏗️ Phase 1: Bootstrap the Environment
 
@@ -21,7 +21,7 @@ You are tasked with automating a 5-page BDD (Behavior Driven Development) test f
 
 ## 🕵️ Phase 2: Navigation & Context Gathering
 
-The test must span 5 distinct application states/pages:
+The test must span 5 distinct application states/pages and steps:
 
 1. **Home Page**
 2. **Search Results Page**

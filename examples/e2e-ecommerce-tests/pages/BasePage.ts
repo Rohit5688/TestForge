@@ -1,19 +1,24 @@
 // ─────────────────────────────────────────────────────────────────────
 // BasePage — TestForge Standard Base Class
 //
-// PURPOSE (Token Efficiency + Synchronization)
-// Instead of: await this.page.locator('button').click()
-// Write:      await this.click(this.submitBtn)
+// SINGLETON PAGE PATTERN (via vasu-playwright-utils + test-setup/page-setup.ts)
+// The page is injected automatically before each test via the fixture in
+// test-setup/page-setup.ts. Page Objects need NO constructor argument:
 //
-// Every wrapper enforces human-like synchronization automatically:
+//   const homePage = new HomePage();   ✅ correct
+//   const homePage = new HomePage(page); ❌ wrong — no page arg needed
+//
+// Every action wrapper enforces human-like synchronization:
 //   scrollIntoViewIfNeeded → waitFor visible → action
-// This prevents the #1 cause of flaky tests: acting before element is ready.
 // ─────────────────────────────────────────────────────────────────────
-import { Page, Locator, expect } from '@playwright/test';
+import { Locator, expect } from '@playwright/test';
+import { getPage, clickByJS, acceptAlert, dismissAlert, getAlertText, check, uncheck, selectByText } from 'vasu-playwright-utils';
 import 'dotenv/config';
 
 export class BasePage {
-  constructor(protected readonly page: Page) {}
+  // Reads from the per-test page singleton set by test-setup/page-setup.ts.
+  // Safe for parallel workers: each worker runs one test at a time.
+  protected get page() { return getPage(); }
 
   // ── Navigation ────────────────────────────────────────────────────
 
@@ -35,15 +40,30 @@ export class BasePage {
    * Never use page.click(selector) or locator.click({ force: true }) directly.
    */
   protected async click(locator: Locator): Promise<void> {
+    await locator.waitFor({ state: "attached" });
     await locator.scrollIntoViewIfNeeded();
-    await locator.waitFor({ state: 'visible' });
+    await locator.waitFor({ state: "visible" });
+    // Aggressive stability check: wait for a tiny moment to ensure layout shift settles
+    await this.page.waitForTimeout(100);
     await locator.click();
+  }
+
+  /**
+   * Click using JS (bypasses visibility checks and layout blockers).
+   * Essential for legacy buttons on LambdaTest that sometimes fail standard clicks.
+   */
+  protected async clickJS(locator: Locator): Promise<void> {
+    await locator.waitFor({ state: "attached" });
+    await locator.scrollIntoViewIfNeeded();
+    await clickByJS(locator);
   }
 
   /**
    * Fill a text input. Clears existing value before typing.
    */
   protected async fill(locator: Locator, value: string): Promise<void> {
+    await locator.waitFor({ state: 'attached' });
+    await locator.scrollIntoViewIfNeeded();
     await locator.waitFor({ state: 'visible' });
     await locator.fill(value);
   }
@@ -52,16 +72,42 @@ export class BasePage {
    * Select a dropdown option by visible label.
    */
   protected async selectOption(locator: Locator, label: string): Promise<void> {
+    await locator.waitFor({ state: 'attached' });
+    await locator.scrollIntoViewIfNeeded();
     await locator.waitFor({ state: 'visible' });
     await locator.selectOption({ label });
   }
 
   /**
-   * Hover over an element (e.g. to reveal a dropdown menu).
+   * Hover over an element.
    */
   protected async hover(locator: Locator): Promise<void> {
+    await locator.waitFor({ state: 'attached' });
     await locator.scrollIntoViewIfNeeded();
+    await locator.waitFor({ state: 'visible' });
     await locator.hover();
+  }
+
+  /**
+   * Clicks and handles a JS alert, confirmation, or prompt.
+   */
+  protected async handleAlert(locator: Locator, accept = true, promptText?: string): Promise<string> {
+    if (accept) {
+      return await acceptAlert(locator, { promptText });
+    } else {
+      return await dismissAlert(locator);
+    }
+  }
+
+  /**
+   * Checks or unchecks a checkbox.
+   */
+  protected async setCheckbox(locator: Locator, shouldCheck: boolean): Promise<void> {
+    if (shouldCheck) {
+      await check(locator);
+    } else {
+      await uncheck(locator);
+    }
   }
 
   // ── Assertions (convenience wrappers for common checks) ────────────
@@ -97,8 +143,8 @@ export class BasePage {
   }
 
   async navigate(url: string): Promise<void> {
+    console.log(`[BasePage] Navigating to: ${url}`);
     await this.goto(url);
-    await this.waitForStable();
     await this.closePopups();
   }
 
