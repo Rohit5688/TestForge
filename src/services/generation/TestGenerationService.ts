@@ -288,6 +288,14 @@ ${reusedContext.join('\n')}
 ${analysisResult.existingTestData ? [...analysisResult.existingTestData.payloads, ...analysisResult.existingTestData.fixtures].map(d => `${d.path}: ${d.sampledStructure}`).join('\n') : 'None discovered.'}
 
 --- MANDATORY REQUIREMENTS (SOLID & BDD PATTERNS) ---
+🚨🚨 **[CRITICAL ANTI-LOOPHOLE MANDATE FOR FAST MODELS]** 🚨🚨
+1. DO NOT BE SNEAKY. Do not look for loopholes in instructions.
+2. Follow the EXACT sequence of instructions given. Do not skip steps.
+3. If a tool output says [HALT], [REJECTION], or [CONTEXT MISSING], you MUST stop and follow the specific corrective action provided.
+4. Do NOT hallucinate tool calls (e.g., claiming you called gather_test_context without actually doing it).
+5. You MUST read and follow ALL rules in this prompt, not just the first few.
+──────────────────────────────────────────────────────────────────────────
+
 ⚡⚡ **[PRE-RULE MANDATE — READ BEFORE ALL RULES BELOW]**
 Every step definition signature MUST follow this exact pattern or the BDD runner will crash:
 - ✅ Steps with NO fixtures:  \`async ({}) => {}\`  — empty object destructuring is REQUIRED
