@@ -288,6 +288,14 @@ ${reusedContext.join('\n')}
 ${analysisResult.existingTestData ? [...analysisResult.existingTestData.payloads, ...analysisResult.existingTestData.fixtures].map(d => `${d.path}: ${d.sampledStructure}`).join('\n') : 'None discovered.'}
 
 --- MANDATORY REQUIREMENTS (SOLID & BDD PATTERNS) ---
+⚡⚡ **[PRE-RULE MANDATE — READ BEFORE ALL RULES BELOW]**
+Every step definition signature MUST follow this exact pattern or the BDD runner will crash:
+- ✅ Steps with NO fixtures:  \`async ({}) => {}\`  — empty object destructuring is REQUIRED
+- ✅ First step when setPageRequired=true: \`async ({ page }) => { setPage(page); ... }\`
+- ❌ NEVER write \`async () => {}\` — playwright-bdd cannot map arguments without the destructure
+- ❌ NEVER write \`async ({ page }) => {}\` in normal steps — page is managed by the singleton
+This mandate overrides your instinct to write clean arrow functions. The \`{}\` is non-optional.
+──────────────────────────────────────────────────────────────────────────
 1. You MUST output a structured JSON response EXACTLY matching the formatting requested below. Do NOT wrap the JSON in markdown code blocks, or if you do, ensure the JSON is perfectly valid.
 2. Step definitions MUST NEVER contain raw Playwright calls (e.g., page.locator). They must strictly call Page Object Model methods. Page Object locators MUST use \`vasu-playwright-utils\` functions: \`getLocatorByTestId()\`, \`getLocatorByRole()\`, \`getLocatorByLabel()\`, \`getLocatorByText()\`, \`getLocatorByPlaceholder()\`. NEVER use native Playwright locator calls (e.g., \`this.page.locator\`) or XPath/CSS class selectors directly.
 3. Reuse existing POM methods from the context above whenever possible. Avoid duplicating existing logic.

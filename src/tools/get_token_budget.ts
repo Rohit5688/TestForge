@@ -14,6 +14,8 @@ RETURNS: Per-tool breakdown of estimated session token usage.
 NEXT: If CRITICAL (>150k tokens), start a new session.
 COST: Low (reads in-memory counters).
 
+⚠️ NOTE: Counters are IN-PROCESS only — they reset each time the MCP server restarts. A report showing 0 tokens means this is the first tool call in the current server process, not a bug.
+
 OUTPUT INSTRUCTIONS: Display the report as-is. Do not add commentary.`,
       inputSchema: z.object({}),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false }
