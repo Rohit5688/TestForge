@@ -121,13 +121,49 @@ const BLOCKED_PATTERNS = [
  * This is a defense-in-depth measure (the sandbox context already blocks these).
  */
 function validateScript(script: string): string | null {
-  for (const pattern of BLOCKED_PATTERNS) {
+  const ACTIONABLE_HINTS: Array<{ pattern: RegExp; hint: string }> = [
+    {
+      pattern: /\brequire\s*\(/,
+      hint: `DO NOT use require(). The sandbox has no module system.\n` +
+            `  → To read a file: await forge.api.readFile('absolute/path/to/file')\n` +
+            `  → To inspect a package API: await forge.api.readFile('node_modules/pkg/dist/index.d.ts')\n` +
+            `  → To launch a browser: use gather_test_context or inspect_page_dom tools instead`
+    },
+    {
+      pattern: /\bimport\s*\(/,
+      hint: `DO NOT use dynamic import(). Use forge.api.readFile() for file reads.`
+    },
+    {
+      pattern: /\beval\s*\(/,
+      hint: `DO NOT use eval(). Write the logic directly in the script.`
+    },
+    {
+      pattern: /\bnew\s+Function\s*\(/,
+      hint: `DO NOT use new Function(). Write the logic directly in the script.`
+    },
+    {
+      pattern: /\bprocess\b/,
+      hint: `DO NOT use process. Use forge.api.readFile() for config/env files.`
+    },
+  ];
+
+  for (const { pattern, hint } of ACTIONABLE_HINTS) {
     if (pattern.test(script)) {
-      return `Blocked: Script contains forbidden pattern "${pattern.source}". ` +
-        `For security, sandbox scripts cannot use eval(), require(), import(), process, global, ` +
-        `constructor chains, or other Node.js internals.`;
+      return `[SANDBOX BLOCKED] Script uses a forbidden Node.js pattern.\n\n${hint}\n\n` +
+        `Available sandbox APIs: forge.api.readFile(path), forge.api.readDir(path), ` +
+        `forge.api.findFiles(dir, ext), forge.api.grep(query, dir), ` +
+        `forge.api.extractPublicMethods(tsCode), forge.api.parseGherkin(text)`;
     }
   }
+
+  // Check remaining blocked patterns without specific hints
+  for (const pattern of BLOCKED_PATTERNS) {
+    if (pattern.test(script)) {
+      return `[SANDBOX BLOCKED] Script contains forbidden pattern "${pattern.source}". ` +
+        `Sandbox is READ-ONLY analysis only. Use forge.api.* methods for all file and code operations.`;
+    }
+  }
+
   return null; // Script is clean
 }
 
