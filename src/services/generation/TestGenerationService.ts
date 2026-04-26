@@ -200,10 +200,11 @@ RULES for using the above:
     }
 
     const stepContextRule = analysisResult.mcpConfig?.setPageRequired === true
-      ? `20. Step-Level Context & Singleton Pattern: This project uses \`${customWrapperPkg}\` with a singleton page store.
+      ? `20. Step-Level Context — Native Fixture Pattern (setPageRequired=true): This project DOES NOT use autoSetup. The \`page\` fixture is NOT pre-wired. You MUST initialize it manually.
+    - ⚠️ **[CRITICAL — READ THIS FIRST]**: This project uses the Native Fixture Pattern. The global singleton is NOT initialized automatically. You MUST call \`setPage(page)\` yourself.
     - Page Objects instantiate with NO args: \`const homePage = new HomePage();\` — NEVER \`new HomePage(page)\`.
     - Inside Page Objects, the page is accessed via \`this.page\` (which calls \`getPage()\` from the BasePage getter).
-    - ⚡ **MANDATORY**: The VERY FIRST step of each scenario MUST destructure \`{ page }\` and call \`setPage(page);\`.
+    - ⚡ **MANDATORY**: The VERY FIRST Given step of each scenario MUST destructure \`{ page }\` and call \`setPage(page);\` BEFORE any Page Object method is called.
     - All OTHER steps must use \`async ({}) => {}\` (empty object destructuring) to map arguments correctly.${customWrapperRule}`
       : `20. Step-Level Context & Singleton Pattern: This project uses \`${customWrapperPkg}\` with a singleton page store. You MUST follow the singleton pattern EVERYWHERE:
     - ⚡ **[CRITICAL BDD FIXTURE MANDATE]**: Step definitions MUST use \`async ({}) => {}\` (empty object destructuring) if no fixtures are used. NO fixture destructuring like \`async ({ page }) ...\` is allowed. NEVER write \`async () => {}\`.
