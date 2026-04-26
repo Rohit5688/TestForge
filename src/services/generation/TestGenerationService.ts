@@ -292,12 +292,15 @@ ${analysisResult.existingTestData ? [...analysisResult.existingTestData.payloads
 Every step definition signature MUST follow this exact pattern or the BDD runner will crash:
 - ✅ Steps with NO fixtures:  \`async ({}) => {}\`  — empty object destructuring is REQUIRED
 - ✅ First step when setPageRequired=true: \`async ({ page }) => { setPage(page); ... }\`
+- ✅ Exception — API interception steps only: \`async ({ page, request }) => {}\` is permitted when the step explicitly needs the request fixture
 - ❌ NEVER write \`async () => {}\` — playwright-bdd cannot map arguments without the destructure
 - ❌ NEVER write \`async ({ page }) => {}\` in normal steps — page is managed by the singleton
 This mandate overrides your instinct to write clean arrow functions. The \`{}\` is non-optional.
 ──────────────────────────────────────────────────────────────────────────
+${bddSpecificRules}
+──────────────────────────────────────────────────────────────────────────
 1. You MUST output a structured JSON response EXACTLY matching the formatting requested below. Do NOT wrap the JSON in markdown code blocks, or if you do, ensure the JSON is perfectly valid.
-2. Step definitions MUST NEVER contain raw Playwright calls (e.g., page.locator). They must strictly call Page Object Model methods. Page Object locators MUST use \`vasu-playwright-utils\` functions: \`getLocatorByTestId()\`, \`getLocatorByRole()\`, \`getLocatorByLabel()\`, \`getLocatorByText()\`, \`getLocatorByPlaceholder()\`. NEVER use native Playwright locator calls (e.g., \`this.page.locator\`) or XPath/CSS class selectors directly.
+2. Step definitions MUST NEVER contain raw Playwright calls (e.g., page.locator, page.goto). Step definitions must strictly call Page Object Model methods. ⚠️ This rule applies to STEP DEFINITIONS ONLY — Page Objects MAY use native Playwright APIs directly (e.g., \`this.page.dragAndDrop()\`, \`this.page.route()\`). Page Object locators MUST use \`vasu-playwright-utils\` functions: \`getLocatorByTestId()\`, \`getLocatorByRole()\`, \`getLocatorByLabel()\`, \`getLocatorByText()\`, \`getLocatorByPlaceholder()\`. NEVER use XPath or raw CSS class selectors as primary locators.
 3. Reuse existing POM methods from the context above whenever possible. Avoid duplicating existing logic.
 4. Semantic Step Matching & Fuzzy Adaptation: If your intent is semantically similar to an "Existing Step Pattern" listed above (e.g. "I press login" vs "I click login button"), you MUST REWRITE your requested step in the \`.feature\` file to exactly match the existing step definition. Do NOT create a duplicate step definition.
 5. Environments & URLs: Do NOT hardcode sensitive URLs or credentials in your steps. ${envStrategyRule}
@@ -305,7 +308,7 @@ ${basePageRule}
 7. Asynchronous Auto-Waiting: Unless handled by a Custom Wrapper, Page Object methods MUST use \`vasu-playwright-utils\` assertions (e.g. \`await expectElementToBeVisible(this.btn)\`) to prevent race conditions during page transitions.
 8. Data-Driven Testing: Default to generating Gherkin \`Scenario Outline:\` with an \`Examples:\` data table when dealing with user inputs, rather than hardcoding static data inside the steps.
 9. Strict Assertions: Every \`Then\` step MUST contain at least one valid assertion (via wrapper or Playwright \`expect\`) verifying a visible DOM state. URL assertions alone are insufficient.
-10. Page Transitions & Navigation: If a method triggers a page transition, it MUST end by calling \`await this.waitForStable()\` (BasePage helper) OR asserting a unique element on the following page. Do NOT call \`this.page.waitForLoadState()\` directly in Page Objects that extend BasePage.
+10. Page Transitions & Navigation: If a method triggers a page transition, it MUST end by calling \`await this.waitForStable()\` (BasePage helper) OR asserting a unique element on the following page. ⚠️ Do NOT call \`this.page.waitForLoadState()\` directly in Page Objects that extend BasePage — use \`this.waitForStable()\` instead. See Rule 15 for projects without BasePage.
 11. Complex Interactions (Mouse/Keyboard): For actions like drag-and-drop or hover, use Playwright's native APIs (e.g., \`await this.page.dragAndDrop()\`) UNLESS the Custom Wrapper provides an abstraction for it.
     🚫 **FORCE HAMMER BAN (Critical):** NEVER use \`force: true\` on any click or interaction that represents a primary user action. NEVER use \`.evaluate(el => el.click())\` or \`.evaluate(el => el.dispatchEvent(...))\` as a workaround for a blocked element. These bypass Playwright's actionability checks and mask real synchronization bugs or genuine UI defects that a real user would encounter. If an element is obscured by an overlay, the ONLY correct fix is: \`await expect(overlay).toBeHidden()\` BEFORE the click. Playwright automatically scrolls elements into view before clicking — manual \`scrollIntoViewIfNeeded()\` as a pre-click ritual is also a smell of incorrect interaction timing.
 12. Background Steps: If ${bgThreshold} or more Scenarios in a feature share the same first \`Given\` step (e.g., navigation to a URL or login), extract it into a Gherkin \`Background:\` block. Never repeat the same step in every scenario when a Background can be used.
@@ -315,8 +318,8 @@ ${basePageRule}
     - Full end-to-end user journeys = last tag in the list
     Tags must appear on the line directly above \`Scenario:\` or \`Scenario Outline:\`.
 ${dotenvImportRule}
-15. Page Load Waits & State Transitions: After any navigation, call \`await this.waitForStable()\` (if extending BasePage) or \`await this.page.waitForLoadState('${waitStrategy}')\`. NEVER use \`waitForLoadState('networkidle')\` — modern SPAs maintain persistent connections and it will time out or produce flaky results. Use \`'domcontentloaded'\` for faster, more reliable hydration signaling.
-    🚫 **WEB-FIRST ASSERTION MANDATE:** Do NOT rely on \`page.title()\`, \`getURL()\`, or \`waitForLoadState('networkidle')\` to verify that a new screen has loaded after an action. You MUST assert a unique structural element on the target page: \`await expectElementToBeVisible(getLocator('.product-grid-item').first())\`. This is the only reliable signal that the page has hydrated in a SPA. URL/title checks are acceptable for supplementary assertions ONLY — they are FORBIDDEN as primary state-transition guards.
+15. Page Load Waits & State Transitions (Non-BasePage projects only): If the project does NOT extend BasePage, call \`await this.page.waitForLoadState('${waitStrategy}')\` after navigation. If the project DOES extend BasePage, use \`this.waitForStable()\` (Rule 10) — do NOT call waitForLoadState directly. NEVER use \`waitForLoadState('networkidle')\` — modern SPAs maintain persistent connections and it will time out. Use \`'domcontentloaded'\` for reliable hydration signaling.
+    🚫 **WEB-FIRST ASSERTION MANDATE:** Do NOT rely on \`page.title()\`, \`getURL()\`, or \`waitForLoadState('networkidle')\` to verify that a new screen has loaded. You MUST assert a unique structural element on the target page. URL/title checks are acceptable for supplementary assertions ONLY — they are FORBIDDEN as primary state-transition guards.
 16. Multi-Tab Interactions: If an action opens a new browser tab, you MUST use \`const [newPage] = await Promise.all([this.page.context().waitForEvent('page'), <action>])\`. Pass this \`newPage\` to subsequent Page Objects instead of the original page. To return to the main window, use \`await this.page.bringToFront()\` and resume using the original page object.
 17. API Interception & Capturing: For mocking APIs, use \`await this.page.route('**/endpoint', ...)\` BEFORE the action. For capturing API responses, use \`const [response] = await Promise.all([this.page.waitForResponse('**/api/*'), actionThatTriggersIt()]);\` to prevent race conditions. Share captured data across steps using module-level variables.
 18. Mid-Test HTTP & Auth: For pure API calls, extract the \`request\` fixture (\`async ({ page, request }) => {...}\`).
@@ -325,44 +328,31 @@ ${dotenvImportRule}
 19. TypeScript DTOs & Models: If handling complex API JSON payloads/responses, or if the user requests strong typing, NEVER use implicit \`any\`. You MUST generate a TypeScript \`export interface ...\` file representing the data shape and save it in the \`models/\` directory.
 ${stepContextRule}
 21. Spec File Guard: You are EXPLICITLY FORBIDDEN from generating or modifying any \`.spec.ts\` files (e.g., those in \`.features-gen/\`). These files are managed by the \`npx bddgen\` command.
-22. Advanced Page Stability: Before taking any screenshot or performing an action after a tab switch/navigation, you MUST inject logic to verify the page is fully loaded.
-23. Ad & Popup Interception: If the test description implies a public-facing site with intrusive ads/popups, include a shared utility method to identify and close common overlays before proceeding.
-24. Intelligent Feature Merging: If you are asked to create a scenario that logically belongs to an existing feature file, you MUST return the content of the existing file with the NEW scenario appended to the end, rather than creating a duplicate file. Do NOT delete existing scenarios.
-25. POM Enforcement for Wrappers: Even if a Custom Wrapper provides high-level actions, you MUST still generate a project-specific Page Object class and encapsulate the UI logic in specific methods. Step definitions MUST NEVER instantiate and call the wrapper class directly.
-26. Test Data Reuse: You MUST prioritize reusing the existing test data structures provided in context.
-27. Automated Accessibility: If the user description mentions "accessibility", "WCAG", "a11y", or "compliance", include a \`Then I check accessibility of the page\` step that maps to \`await pageObject.checkAccessibility()\`.
-28. TSConfig Autowiring: If your implementation creates a NEW top-level architectural directory (e.g., \`models/\`, \`types/\`, \`helpers/\`), you MUST update \`tsconfig.json\` to add the corresponding path alias.
-29. **[PHASE 4: STATE-MACHINE MICRO-PROMPTING]**: If this request requires generating a very large Page Object AND complex step definitions simultaneously, serialize your work. Generate and invoke \`validate_and_write\` for ONLY the \`jsonPageObjects\` first. Wait for compilation success before generating the \`.feature\` and \`.steps.ts\` files.
-31. **[COMPLETION TOKEN BUDGET — STRICT]**: Every token in your response is billable.
+22. Ad & Popup Interception: If the test description implies a public-facing site with intrusive ads/popups, include a shared utility method to identify and close common overlays before proceeding.
+23. Intelligent Feature Merging: If you are asked to create a scenario that logically belongs to an existing feature file, you MUST return the content of the existing file with the NEW scenario appended to the end, rather than creating a duplicate file. Do NOT delete existing scenarios.
+24. POM Enforcement for Wrappers: Even if a Custom Wrapper provides high-level actions, you MUST still generate a project-specific Page Object class and encapsulate the UI logic in specific methods. Step definitions MUST NEVER instantiate and call the wrapper class directly.
+25. Automated Accessibility: If the user description mentions "accessibility", "WCAG", "a11y", or "compliance", include a \`Then I check accessibility of the page\` step that maps to \`await pageObject.checkAccessibility()\`.
+26. TSConfig Autowiring: If your implementation creates a NEW top-level architectural directory (e.g., \`models/\`, \`types/\`, \`helpers/\`), you MUST update \`tsconfig.json\` to add the corresponding path alias.
+27. **[PHASE 4: STATE-MACHINE MICRO-PROMPTING]**: If this request requires generating a very large Page Object AND complex step definitions simultaneously, serialize your work. Generate and invoke \`validate_and_write\` for ONLY the \`jsonPageObjects\` first. Wait for compilation success before generating the \`.feature\` and \`.steps.ts\` files.
+28. **[CRITICAL: ONE CLASS PER FILE — NEVER MONOLITHIC]**: You MUST generate a SEPARATE \`jsonPageObjects\` entry for EACH distinct page or screen in the test flow. NEVER combine multiple pages into a single Page Object class or a single file.
+    - ❌ WRONG: One \`EcommercePage\` class with methods for Home, Product, Cart, Checkout
+    - ✅ CORRECT: \`HomePage\`, \`ProductPage\`, \`CartPage\`, \`CheckoutPage\` — each a separate entry in \`jsonPageObjects\` with its own \`path\`
+    - Rule of thumb: if the URL changes during the flow, a new Page Object is required.
+    - **Step File Split (MUST):** Generate ONE \`jsonSteps\` entry per feature file — NEVER dump all step definitions into a single \`.steps.ts\` file.
+29. **[COMPLETION TOKEN BUDGET — STRICT]**: Every token in your response is billable.
     - ❌ NEVER add inline comments to generated code: \`// Wait for element\`, \`// Click button\`, \`// Navigate to page\`
     - ❌ NEVER add JSDoc blocks to generated methods
     - ❌ NEVER explain what a line does in a comment — the method name is the documentation
     - ✅ Use \`jsonSteps\` instead of writing raw TypeScript in \`files[]\` for step definitions (saves ~70% output tokens)
-    - ✅ Use \`jsonPageObjects\` for ALL Page Objects (already required by Rule 30)
+    - ✅ Use \`jsonPageObjects\` for ALL Page Objects
     - ✅ The \`explanation\` field is the ONLY place for natural language — keep it to 1-2 sentences
-32. **[E2E JOURNEY INTEGRITY — Critical]:** NEVER use \`gotoURL()\` as a fallback inside a test step when a UI interaction fails. If a drawer, modal, or button is blocked or fails to open, the ONLY correct response is to wait for the blocking overlay to clear (\`await expectElementToBeHidden(overlay)\`) and retry the interaction. Using \`gotoURL('/cart')\` to skip a failed UI element creates a **False Positive** — the test passes but the feature is broken for real users. Direct URL navigation via \`gotoURL()\` is permitted ONLY for the initial application entry point in a \`Given\` step.
-33. **[STRICT-MODE RESOLUTION — Critical]:** When Playwright throws a strict-mode violation ("resolved to N elements"), NEVER suppress it with \`.first()\`. Using \`.first()\` silently targets an unseen element (e.g., a hidden mobile navbar) and breaks on viewport changes. The ONLY correct resolution strategies are:
-    - **Container scoping:** \`getLocator('nav').getByRole('searchbox')\` — scope to the visible parent container.
-    - **Visibility filter:** Use \`getVisibleLocator()\` from \`vasu-playwright-utils\` — explicitly require visibility.
-    - **Named locator:** Add a \`{ name: '...' }\` option to \`getLocatorByRole\` to disambiguate semantically (e.g., \`getLocatorByRole('button', { name: 'Add to Cart' })\`).
-34. **[TYPESCRIPT COMPILATION SAFETY — Critical]:** You MUST write syntactically valid TypeScript. The MCP server runs \`tsc --noEmit\` on your generated \`jsonPageObjects\`. To prevent compilation failures:
-    - ALWAYS declare class properties inside your \`jsonPageObjects.locators\` array before using them in \`methods\`.
-    - NEVER call \`this.someLocator\` inside \`methods\` if you did NOT define \`someLocator\` in \`locators\`.
-    - Ensure all imported types/interfaces exist and use \`any\` as a last resort ONLY if the type is unknown.
-    - If your generated \`validate_and_write\` fails with a TypeScript error, you MUST read the error and try again, fixing the undefined variable or syntax error.
-
+30. **[E2E JOURNEY INTEGRITY — Critical]:** NEVER use \`gotoURL()\` as a fallback inside a test step when a UI interaction fails. If a drawer, modal, or button is blocked, the ONLY correct response is to wait for the blocking overlay to clear (\`await expectElementToBeHidden(overlay)\`) and retry. Direct URL navigation via \`gotoURL()\` is permitted ONLY for the initial entry point in a \`Given\` step.
+31. **[STRICT-MODE RESOLUTION — Critical]:** When Playwright throws a strict-mode violation ("resolved to N elements"), NEVER suppress it with \`.first()\`. Correct strategies: container scoping, \`getVisibleLocator()\`, or named \`{ name: '...' }\` option on \`getLocatorByRole\`.
+32. **[TYPESCRIPT COMPILATION SAFETY — Critical]:** ALWAYS declare class properties in \`jsonPageObjects.locators\` before using them in \`methods\`. NEVER call \`this.someLocator\` if it was not defined in \`locators\`. If \`validate_and_write\` fails with a TypeScript error, read and fix it before retrying.
 
 ${memoryPrompt}
 
 ${locatorSourceSection}
-
-${bddSpecificRules}
-
-30. **[CRITICAL: ONE CLASS PER FILE — NEVER MONOLITHIC]**: You MUST generate a SEPARATE \`jsonPageObjects\` entry for EACH distinct page or screen in the test flow. NEVER combine multiple pages into a single Page Object class or a single file.
-    - ❌ WRONG: One \`EcommercePage\` class with methods for Home, Product, Cart, Checkout
-    - ✅ CORRECT: \`HomePage\`, \`ProductPage\`, \`CartPage\`, \`CheckoutPage\` — each a separate entry in \`jsonPageObjects\` with its own \`path\`
-    - Rule of thumb: if the URL changes during the flow, a new Page Object is required.
-    - **Step File Split (MUST):** Generate ONE \`jsonSteps\` entry per feature file — NEVER dump all step definitions into a single \`.steps.ts\` file. A flow covering Login + Cart + Checkout MUST produce three entries: \`step-definitions/login.steps.ts\`, \`step-definitions/cart.steps.ts\`, \`step-definitions/checkout.steps.ts\`. Page Object instances shared within the same step file are declared once at the top (outside any step body).
 
 --- OUTPUT SCHEMA ---
 Your entire response must be a single JSON object. DO NOT write raw TypeScript for Page Objects or step definitions.
