@@ -75,11 +75,11 @@ export function registerGenerateGherkinPomTestSuite(server: McpServer, container
   server.registerTool(
     "generate_gherkin_pom_test_suite",
     {
-      description: `TRIGGER: Generate a standard Playwright BDD test suite.
+      description: `TRIGGER: Call AFTER gather_test_context or inspect_page_dom — NOT before. Generates Playwright-BDD test suite.
 RETURNS: Rigid LLM system instruction context — causes chat completion to produce Playwright-BDD JSON (feature files + POM).
 NEXT: Follow returned instructions → Call validate_and_write with generated files.
 COST: Medium (~500-2000 tokens, includes codebase analysis)
-ERROR_HANDLING: Standard
+ERROR_HANDLING: Throws if no DOM context found — call gather_test_context first.
 
 Generates feature files and POM instructions. AUTO-INJECTION: If inspect_page_dom was previously called with returnFormat:'json', server auto-injects element reference into the prompt — no extra params needed.
 
@@ -123,14 +123,16 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       // 2. Fetch cached DOM context if not provided
       const resolvedDomContext = domJsonContext || domInspectionCache.get(projectRoot);
 
-      // Fix-2: Context gate — warn LLM when no verified DOM context exists at all
+      // Fix-2 (hardened for fast models): Hard throw when no verified DOM context exists
       if (!resolvedDomContext && !testContext) {
-        return textResult(
-          `[CONTEXT MISSING] ⚠️ No verified DOM context found.\n` +
-          `For best results (first-pass correct selectors), call gather_test_context BEFORE generating tests:\n` +
-          `  → gather_test_context({ baseUrl: "<app_url>", paths: ["<page_path>"] })\n\n` +
-          `If the app is not running or you want to proceed without live inspection, call generate_gherkin_pom_test_suite again with the same parameters.\n` +
-          `WARNING: Proceeding without DOM context may result in guessed selectors that fail at runtime.`
+        throw McpErrors.projectValidationFailed(
+          `[CONTEXT REQUIRED] No verified DOM context found for "${projectRoot}".\n` +
+          `MANDATORY: Call gather_test_context FIRST to capture live selectors and network contracts:\n` +
+          `  → gather_test_context({ baseUrl: "<app_url>", paths: ["<page_path>"] })\n` +
+          `Then call generate_gherkin_pom_test_suite again — context is auto-injected.\n` +
+          `Skipping this step produces guessed selectors that fail at runtime.`,
+          'generate_gherkin_pom_test_suite',
+          { suggestedNextTools: ['gather_test_context', 'inspect_page_dom'] }
         );
       }
 
