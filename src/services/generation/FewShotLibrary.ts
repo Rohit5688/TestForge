@@ -45,7 +45,7 @@ Before writing ANY code, follow this sequence in order:
 
 \`\`\`typescript
 // ❌ BAD: Positional XPath — breaks on any layout change
-await page.locator('//div[1]/button[2]').click();
+await click('//div[1]/button[2]');
 
 // ❌ BAD: Direct Playwright calls inside step definitions — violates POM
 When('I click login', async () => { await page.locator('[data-testid="login"]').click(); });
@@ -54,21 +54,22 @@ When('I click login', async () => { await page.locator('[data-testid="login"]').
 async clickLogin(): Promise<void> { /* TODO */ }
 
 // ❌ BAD: Hardcoded URL in Page Object
-async navigate() { await this.page.goto('https://example.com/login'); }
+async navigate() { await gotoURL('https://example.com/login'); }
 \`\`\`
 
 \`\`\`typescript
-// ✅ GOOD: Stable locator from inspect_page_dom
-get loginBtn() { return this.page.getByTestId('login-button'); }
+// ✅ GOOD: Stable locator from inspect_page_dom using vasu utils
+get loginBtn() { return getLocatorByTestId('login-button'); }
 
-// ✅ GOOD: Step uses page object WITHOUT constructor args (singleton injected by setup)
+// ✅ GOOD: Page Objects are declared ONCE at top level of the step file (not inside each step)
+const loginPage = new LoginPage(); // ← top of file, outside any step
+
 When('I click the login button', async () => { 
-  const loginPage = new LoginPage(); 
-  await loginPage.clickLogin(); 
+  await loginPage.clickLogin();   // ← no 'new LoginPage()' inside the step
 });
 
-// ✅ GOOD: Full implementation
-async clickLogin(): Promise<void> { await this.loginBtn.click(); }
+// ✅ GOOD: Full implementation using vasu click()
+async clickLogin(): Promise<void> { await click(this.loginBtn); }
 
 \`\`\`typescript
 // ❌ BAD: Destructuring the \`page\` fixture is BANNED
@@ -80,54 +81,81 @@ const loginPage = new LoginPage(page);
 \`\`\`
 
 \`\`\`typescript
-// ✅ GOOD: Uses baseURL from config
-async navigate() { await this.page.goto('/login'); }
+// ✅ GOOD: Uses baseURL from config via gotoURL
+async navigate() { await gotoURL('/login'); }
 \`\`\`
 
 \`\`\`typescript
 // ❌ BAD: force:true bypasses actionability — masks real overlay bugs
-await this.page.locator('#checkout-btn').click({ force: true });
+await click('#checkout-btn', { force: true });
 
-// ❌ BAD: evaluate-click bypasses Playwright entirely — hides real UI defects
-await this.page.locator('#checkout-btn').evaluate((el) => (el as HTMLElement).click());
+// ❌ BAD: clickByJS bypasses Playwright entirely — hides real UI defects
+await clickByJS('#checkout-btn');
 
 // ✅ GOOD: Wait for the overlay to clear, then click normally
-await expect(this.page.locator('.loading-overlay')).toBeHidden();
-await this.page.locator('#checkout-btn').click();
+await expectElementToBeHidden('.loading-overlay');
+await click('#checkout-btn');
 \`\`\`
 
 \`\`\`typescript
 // ❌ BAD: networkidle / page.title() as SPA state guard — flaky and Selenium-era
-await page.waitForLoadState('networkidle');
-expect(await page.title()).toBe('Search Results');
+await waitForPageLoadState('networkidle');
+expect(await getURL()).toContain('Search Results');
 
-// ✅ GOOD: Assert a structural element that only appears when the screen is hydrated
-await expect(page.locator('.product-grid-item').first()).toBeVisible();
+// ✅ GOOD: Use domcontentloaded for fast hydration signaling OR structural element assertion
+await waitForPageLoadState('domcontentloaded');
+await expectElementToBeVisible(getLocator('.product-grid-item').first());
 \`\`\`
 
 \`\`\`typescript
-// ❌ BAD: Direct URL goto() inside a test step — creates False Positives in E2E
+// ❌ BAD: Direct URL navigation inside a test step — creates False Positives in E2E
 When('I proceed to cart', async () => {
   // UI interaction failed — bypassed with goto. FORBIDDEN.
-  await page.goto('/cart');
+  await gotoURL('/cart');
 });
 
 // ✅ GOOD: Wait for the blocker, then use the real UI element
 When('I proceed to cart', async () => {
-  await expect(cartPage.addedToCartToast).toBeHidden();
+  await expectElementToBeHidden(cartPage.addedToCartToast);
   await cartPage.clickViewCart();
 });
 \`\`\`
 
 \`\`\`typescript
 // ❌ BAD: .first() suppresses strict-mode — silently targets invisible element
-await page.getByRole('searchbox').first().fill('Nike Shoes');
+await fill(getLocatorByRole('searchbox').first(), 'Nike Shoes');
 
 // ✅ GOOD: Container-scope OR visibility filter to resolve strict-mode correctly
-await page.locator('header').getByRole('searchbox').fill('Nike Shoes');
+await fill(getLocator('header').getByRole('searchbox'), 'Nike Shoes');
 // OR
-await page.getByRole('searchbox').filter({ visible: true }).fill('Nike Shoes');
+await fill(getVisibleLocator(getLocatorByRole('searchbox')), 'Nike Shoes');
 \`\`\`
+`;
+  }
+
+  /**
+   * Returns the CLI-to-Library code mapping table from vasu-playwright-utils.
+   * This teaches the LLM how to translate native Playwright thoughts into utility calls.
+   */
+  public static getMappingTable(): string {
+    return `
+## 🔄 CLI-TO-LIBRARY MAPPING (vasu-playwright-utils)
+When translating user intent or Playwright-CLI generated code, use these equivalents:
+
+| Native Playwright Code                         | vasu-playwright-utils Equivalent             |
+| ---------------------------------------------- | -------------------------------------------- |
+| \`await page.goto(url)\`                         | \`await gotoURL(url)\`                         |
+| \`await page.locator(sel).click()\`              | \`await click(sel)\`                           |
+| \`await page.locator(sel).click()\` + nav        | \`await clickAndNavigate(sel)\`                |
+| \`await page.locator(sel).fill(val)\`            | \`await fill(sel, val)\`                       |
+| \`page.getByRole(role, opts)\`                   | \`getLocatorByRole(role, opts)\`               |
+| \`page.getByTestId(id)\`                         | \`getLocatorByTestId(id)\`                     |
+| \`await expect(loc).toBeVisible()\`              | \`await expectElementToBeVisible(input)\`      |
+| \`await expect(loc).toBeHidden()\`               | \`await expectElementToBeHidden(input)\`       |
+| \`await expect(page).toHaveURL(url)\`            | \`await expectPageToHaveURL(url)\`             |
+
+**MANDATORY IMPORTS**:
+Always import these from \`vasu-playwright-utils\` or its subpaths.
 `;
   }
 }

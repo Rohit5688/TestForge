@@ -113,7 +113,7 @@ export class EnvManagerService {
     const results: EnvWriteResult[] = [];
     for (const envName of envs) {
       const defaults: EnvEntry[] = [
-        { key: 'BASE_URL', value: `https://${envName}-your-app-url.com` },
+        { key: 'BASE_URL', value: `***https://${envName}-your-app-url.com***` },
         { key: 'TEST_ENVIRONMENT', value: envName },
         { key: 'HEADLESS', value: 'true' },
         { key: 'SLOWMO', value: '0' },
@@ -131,7 +131,7 @@ export class EnvManagerService {
    */
   public scaffold(projectRoot: string): EnvWriteResult {
     const defaults: EnvEntry[] = [
-      { key: 'BASE_URL', value: 'https://your-app-url.com' },
+      { key: 'BASE_URL', value: '***https://your-app-url.com***' },
       { key: 'TEST_ENVIRONMENT', value: 'local' },
       { key: 'HEADLESS', value: 'true' },
       { key: 'SLOWMO', value: '0' },

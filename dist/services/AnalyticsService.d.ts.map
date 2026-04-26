@@ -1,1 +1,0 @@
-{"version":3,"file":"AnalyticsService.d.ts","sourceRoot":"","sources":["../../src/services/AnalyticsService.ts"],"names":[],"mappings":"AAGA,qBAAa,gBAAgB;IAC3B;;OAEG;IACI,iBAAiB,CAAC,YAAY,EAAE,MAAM,GAAG,MAAM;IAmBtD;;;OAGG;IACI,mBAAmB,CAAC,WAAW,EAAE,MAAM,GAAG,MAAM;IA+BvD;;OAEG;IACI,qBAAqB,CAAC,QAAQ,EAAE,MAAM,EAAE,QAAQ,EAAE,MAAM,GAAG,MAAM;CAqBzE"}

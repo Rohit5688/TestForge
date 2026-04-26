@@ -100,6 +100,7 @@ export class HybridPromptEngine {
    */
   public buildHybridBlock(analysis: CodebaseAnalysisResult): string {
     const cot = FewShotLibrary.getCoTScaffold();
+    const mapping = FewShotLibrary.getMappingTable();
     const antiPattern = FewShotLibrary.getNegativeExample(analysis);
     const champion = this.selectChampion(analysis);
 
@@ -107,7 +108,7 @@ export class HybridPromptEngine {
       ? this.formatChampionBlock(champion)
       : `\n## 🏆 GOLD STANDARD\nNo mature Page Objects found yet. You are creating the first one — follow the architecture rules strictly and produce a complete, exemplary implementation that future tests will reuse.\n`;
 
-    return [cot, championBlock, antiPattern].join('\n');
+    return [cot, mapping, championBlock, antiPattern].join('\n');
   }
 
   // ─── Private Helpers ─────────────────────────────────────────────────────────

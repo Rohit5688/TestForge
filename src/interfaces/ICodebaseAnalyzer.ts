@@ -47,6 +47,7 @@ export interface CodebaseAnalysisResult {
     backgroundBlockThreshold?: number;
     waitStrategy?: 'networkidle' | 'domcontentloaded' | 'load';
     authStrategy?: 'none' | 'users-json' | 'env';
+    setPageRequired?: boolean;
   };
   userRoles?: {
     environment: string;

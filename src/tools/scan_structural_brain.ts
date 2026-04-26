@@ -1,22 +1,18 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult, truncate } from "./_helpers.js";
-import type { StructuralBrainService } from "../services/analysis/StructuralBrainService.js";
+import { StructuralBrainService } from "../services/analysis/StructuralBrainService.js";
 
-export function registerScanStructuralBrain(server: McpServer, container: ServiceContainer) {
-  const structuralBrain = container.resolve<StructuralBrainService>("structuralBrain");
+export function registerScanStructuralBrain(server: McpServer) {
 
   server.registerTool(
     "scan_structural_brain",
     {
-      description: `TRIGGER: Identify God Nodes (>5 connections) in the architecture before planning refactors.
-RETURNS: List of risky files with connection counts — modify cautiously.
-NEXT: Avoid touching God Nodes directly → Use Adapters or targeted surgical edits.
+      description: `TRIGGER: Before editing any file — check if it's a god node and which files will be directly affected.
+RETURNS: God node list with severity + "editing this affects: [fileA, fileB]" (1-hop only). Safe-to-edit verdict per file.
+NEXT: If target file is a god node → surgical replace_file_content only, ripple-audit listed dependents after.
 COST: Low (~100-200 tokens)
 ERROR_HANDLING: Standard
-
-Scans import graph and caches God Nodes.
 
 OUTPUT: Ack (<= 10 words), proceed.`,
       inputSchema: z.object({
@@ -26,8 +22,27 @@ OUTPUT: Ack (<= 10 words), proceed.`,
     },
     async (args) => {
       const { projectRoot } = args as any;
-      const reportNodes = await structuralBrain.scanProject(projectRoot);
-      return textResult(JSON.stringify(reportNodes, null, 2));
+      const brainService = new StructuralBrainService(projectRoot);
+      brainService.invalidateCache();
+      const godNodes = await brainService.scanProject();
+
+      if (godNodes.length === 0) {
+        return textResult('No god nodes detected. All files safe to edit freely.');
+      }
+
+      const lines: string[] = [`God Nodes (${godNodes.length}) — edit with caution:\n`];
+      for (const n of godNodes) {
+        const icon = n.severity === 'critical' ? '🔴' : '🟡';
+        lines.push(`${icon} ${n.file} — ${n.connections} dependents [${n.severity}]`);
+        const affected = (n.importedBy ?? []).slice(0, 10);
+        if (affected.length > 0) {
+          lines.push(`   editing this affects: ${affected.join(', ')}${n.connections > 10 ? ` (+${n.connections - 10} more)` : ''}`);
+        }
+        lines.push('');
+      }
+
+      return textResult(lines.join('\n'));
     }
   );
 }
+

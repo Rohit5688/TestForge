@@ -73,6 +73,56 @@ export class ASTScrutinizer {
     }
   }
 
+  /**
+   * Scans generated code for project-specific compliance violations.
+   * Specifically targets native Playwright anti-patterns when vasu-playwright-utils is enforced.
+   * @throws {McpError} If non-compliant patterns are found.
+   */
+  public static scrutinizeCompliance(fileContent: string, fileName: string): void {
+    if (!fileName.endsWith('.ts') && !fileName.endsWith('.js')) return;
+
+    // 1. Prohibit Native Playwright Locators/Actions (Enforce vasu-playwright-utils)
+    const nativeLocatorPatterns = [
+      { pattern: /page\.locator\s*\(/g, replacement: 'getLocator() or click()/fill()' },
+      { pattern: /page\.getBy(Role|Text|Label|Placeholder|AltText|Title|TestId)\s*\(/g, replacement: 'getLocatorByRole() or getLocatorByTestId()' },
+      { pattern: /page\.(click|fill|check|uncheck|selectOption|setInputFiles|focus|hover|press|type)\s*\(/g, replacement: 'click(), fill(), etc. from vasu-playwright-utils' },
+      { pattern: /page\.\$\s*\(/g, replacement: 'getLocator()' },
+      { pattern: /page\.\$\$\s*\(/g, replacement: 'getLocator()' },
+    ];
+
+    for (const { pattern, replacement } of nativeLocatorPatterns) {
+      const matches = fileContent.match(pattern);
+      if (matches) {
+        throw McpErrors.projectValidationFailed(
+          `NON-COMPLIANT CODE in '${fileName}': Found native Playwright call '${matches[0].trim()}'.\n` +
+          `   The TestForge infrastructure REQUIRES using 'vasu-playwright-utils' for all interactions.\n` +
+          `   Use: ${replacement} instead of native page methods.`
+        );
+      }
+    }
+
+    // 2. Prohibit networkidle (Enforce domcontentloaded / Structural Assertions)
+    const networkIdleRe = /waitForLoadState\s*\(\s*['"`]networkidle['"`]\s*\)/g;
+    if (networkIdleRe.test(fileContent)) {
+      throw McpErrors.projectValidationFailed(
+        `NON-COMPLIANT CODE in '${fileName}': Found waitForLoadState('networkidle').\n` +
+        `   'networkidle' is strictly PROHIBITED in modern SPA testing as it is flaky and unreliable.\n` +
+        `   Use: 'domcontentloaded' or wait for a structural element (expectElementToBeVisible) instead.`
+      );
+    }
+
+    // 3. Prohibit page.title() / page.url() as primary state guards
+    // We allow them for assertions, but not for "waiting" logic that doesn't have an assertion.
+    // This is harder to catch via regex, but we can catch common anti-patterns.
+    const weakGuardRe = /await\s+page\.(title|url)\(\)/g;
+    if (weakGuardRe.test(fileContent) && !fileContent.includes('expect(')) {
+      throw McpErrors.projectValidationFailed(
+        `NON-COMPLIANT CODE in '${fileName}': Found 'page.title()' or 'page.url()' used without an assertion.\n` +
+        `   These are Selenium-era anti-patterns. Use web-first assertions like 'expect(locator).toBeVisible()' to guard state transitions.`
+      );
+    }
+  }
+
   public static hasClassLocatorsFast(content: string): boolean {
     return content.includes('page.locator') || content.includes('page.getBy') || content.includes('page.$') || content.includes('page.goto');
   }

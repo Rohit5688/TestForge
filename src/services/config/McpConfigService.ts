@@ -122,6 +122,11 @@ export interface McpConfig {
   basePageClass?: string;
 
   /**
+   * Whether steps should destructure { page } and explicitly set the page singleton.
+   */
+  setPageRequired?: boolean;
+
+  /**
    * Load state strategy to use after navigation calls.
    * Defaults to 'networkidle' which works for most SPAs.
    * @default 'domcontentloaded'

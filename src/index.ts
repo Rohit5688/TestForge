@@ -6,11 +6,74 @@ import express from "express";
 
 import { container } from "./container/ServiceContainer.js";
 import { registerAllTools } from "./tools/toolRegistry.js";
+import { TokenBudgetService } from "./services/config/TokenBudgetService.js";
+import { ObservabilityService } from "./services/analysis/ObservabilityService.js";
 
 const server = new McpServer({
   name: "appforge",
   version: "1.0.0"
 });
+
+// --- TOKEN BUDGET TRACKING INTERCEPTOR ---
+const originalTool = (server as any).tool;
+const originalRegisterTool = (server as any).registerTool;
+
+function wrapHandler(name: string, handler: any) {
+  return async (args: any, extra: any) => {
+    const budgetService = TokenBudgetService.getInstance();
+    const obsService = ObservabilityService.getInstance();
+    
+    const inputStr = JSON.stringify(args || {});
+    let outputStr = "";
+    const startTimeMs = Date.now();
+    const projectRoot = args?.projectRoot;
+    
+    const traceId = obsService.toolStart(name, args || {});
+    
+    try {
+      const result = await handler(args, extra);
+      outputStr = typeof result === 'string' ? result : JSON.stringify(result || {});
+      const footer = budgetService.trackToolCall(name, inputStr, outputStr);
+      
+      obsService.toolEnd(traceId, name, true, { resultLength: outputStr.length }, startTimeMs, projectRoot);
+      
+      if (result && Array.isArray(result.content)) {
+        const textContent = result.content.find((c: any) => c.type === 'text');
+        if (textContent && typeof textContent.text === 'string') {
+          textContent.text += `\n\n${footer}`;
+        }
+      }
+      return result;
+    } catch (err: any) {
+      outputStr = err.message || String(err);
+      budgetService.trackToolCall(name, inputStr, outputStr);
+      obsService.toolError(traceId, name, err, startTimeMs, projectRoot);
+      throw err;
+    }
+  };
+}
+
+if (originalTool) {
+  (server as any).tool = function(name: string, p1: any, p2: any, p3?: any) {
+    if (typeof p2 === 'function') {
+      return originalTool.call(this, name, p1, wrapHandler(name, p2));
+    }
+    if (typeof p3 === 'function') {
+      return originalTool.call(this, name, p1, p2, wrapHandler(name, p3));
+    }
+    return originalTool.apply(this, arguments);
+  };
+}
+
+if (originalRegisterTool) {
+  (server as any).registerTool = function(name: string, options: any, handler: any) {
+    if (typeof handler === 'function') {
+      return originalRegisterTool.call(this, name, options, wrapHandler(name, handler));
+    }
+    return originalRegisterTool.apply(this, arguments);
+  };
+}
+// -----------------------------------------
 
 registerAllTools(server, container);
 

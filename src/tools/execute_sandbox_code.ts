@@ -5,6 +5,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult } from "./_helpers.js";
+import { McpErrors } from "../types/ErrorSystem.js";
 import type { SandboxExecutionService } from "../services/execution/SandboxExecutionService.js";
 import { resolveSafePath } from "../services/execution/SandboxExecutionService.js";
 import type { CodebaseAnalyzerService } from "../services/analysis/CodebaseAnalyzerService.js";
@@ -36,19 +37,23 @@ OUTPUT: Ack (<= 10 words), proceed.`,
     },
     async (args) => {
       const { projectRoot, script, timeoutMs } = args as any;
-      const root = projectRoot || process.cwd();
+      if (!projectRoot) {
+        throw McpErrors.invalidParameter('projectRoot', 'projectRoot is required; the sandbox security boundary cannot be verified without it.', 'execute_sandbox_code', { suggestedNextTools: ['execute_sandbox_code'] });
+      }
+      const root = projectRoot;
+
 
       const apiRegistry = {
         readFile: async (fileRelPath: string) => {
-          const safePath = path.isAbsolute(fileRelPath) ? fileRelPath : resolveSafePath(root, fileRelPath);
+          const safePath = resolveSafePath(root, fileRelPath);
           return fs.readFile(safePath, 'utf8');
         },
         readDir: async (dirRelPath: string) => {
-          const safePath = path.isAbsolute(dirRelPath) ? dirRelPath : resolveSafePath(root, dirRelPath);
+          const safePath = resolveSafePath(root, dirRelPath);
           return fs.readdir(safePath);
         },
         findFiles: async (dirRelPath: string, extension: string) => {
-          const safePath = path.isAbsolute(dirRelPath) ? dirRelPath : resolveSafePath(root, dirRelPath);
+          const safePath = resolveSafePath(root, dirRelPath);
           const results: string[] = [];
           async function scan(currentDir: string) {
             const entries = await fs.readdir(currentDir, { withFileTypes: true });
@@ -63,7 +68,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
           return results;
         },
         grep: async (query: string, dirRelPath: string = '.') => {
-          const safePath = path.isAbsolute(dirRelPath) ? dirRelPath : resolveSafePath(root, dirRelPath);
+          const safePath = resolveSafePath(root, dirRelPath);
           const results: { file: string; line: number; content: string }[] = [];
           async function scan(currentDir: string) {
             const entries = await fs.readdir(currentDir, { withFileTypes: true });
@@ -72,13 +77,13 @@ OUTPUT: Ack (<= 10 words), proceed.`,
               const fullPath = path.join(currentDir, entry.name);
               if (entry.isDirectory()) await scan(fullPath);
               else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.js') || entry.name.endsWith('.feature'))) {
-                 const content = await fs.readFile(fullPath, 'utf8');
-                 if (content.includes(query)) {
-                   const lines = content.split('\n');
-                   lines.forEach((lineStr, idx) => {
-                     if (lineStr.includes(query)) results.push({ file: path.relative(root, fullPath), line: idx + 1, content: lineStr.trim() });
-                   });
-                 }
+                const content = await fs.readFile(fullPath, 'utf8');
+                if (content.includes(query)) {
+                  const lines = content.split('\n');
+                  lines.forEach((lineStr, idx) => {
+                    if (lineStr.includes(query)) results.push({ file: path.relative(root, fullPath), line: idx + 1, content: lineStr.trim() });
+                  });
+                }
               }
             }
           }
@@ -86,39 +91,39 @@ OUTPUT: Ack (<= 10 words), proceed.`,
           return results;
         },
         extractPublicMethods: (tsCode: string) => {
-           // Basic regex fallback if ASTScrutinizer is not injected, but we can do a robust regex to mimic
-           const methods: string[] = [];
-           const matches = tsCode.matchAll(/(?:public\s+|async\s+)?(?:[a-zA-Z0-9_]+)\s*\((.*?)\)\s*(?::\s*[A-Za-z0-9_<>[\]]+)?\s*\{/g);
-           for (const match of matches) {
-             const full = match[0] as string;
-             if (!full.includes('function') && !full.includes('if') && !full.includes('for') && !full.includes('while') && !full.includes('catch')) {
-               const namePart = full.split('(')[0];
-               if (namePart) {
-                 methods.push(namePart.trim() + '()');
-               }
-             }
-           }
-           return [...new Set(methods)];
+          // Basic regex fallback if ASTScrutinizer is not injected, but we can do a robust regex to mimic
+          const methods: string[] = [];
+          const matches = tsCode.matchAll(/(?:public\s+|async\s+)?(?:[a-zA-Z0-9_]+)\s*\((.*?)\)\s*(?::\s*[A-Za-z0-9_<>[\]]+)?\s*\{/g);
+          for (const match of matches) {
+            const full = match[0] as string;
+            if (!full.includes('function') && !full.includes('if') && !full.includes('for') && !full.includes('while') && !full.includes('catch')) {
+              const namePart = full.split('(')[0];
+              if (namePart) {
+                methods.push(namePart.trim() + '()');
+              }
+            }
+          }
+          return [...new Set(methods)];
         },
         parseGherkin: (text: string) => {
-           const lines = text.split('\n');
-           const result: { type: string, name: string, steps: string[] }[] = [];
-           let current: any = null;
-           for (const line of lines) {
-             const t = line.trim();
-             if (t.startsWith('Feature:')) {
-               current = { type: 'Feature', name: t.replace('Feature:', '').trim(), scenarios: [] };
-               result.push(current);
-             } else if (t.startsWith('Scenario:') || t.startsWith('Scenario Outline:')) {
-               current = { type: 'Scenario', name: t.replace(/Scenario( Outline)?:/, '').trim(), steps: [] };
-               result.push(current);
-             } else if (t.match(/^(Given|When|Then|And|But)\s/)) {
-               if (current && current.steps) {
-                 current.steps.push(t);
-               }
-             }
-           }
-           return result;
+          const lines = text.split('\n');
+          const result: { type: string, name: string, steps: string[] }[] = [];
+          let current: any = null;
+          for (const line of lines) {
+            const t = line.trim();
+            if (t.startsWith('Feature:')) {
+              current = { type: 'Feature', name: t.replace('Feature:', '').trim(), scenarios: [] };
+              result.push(current);
+            } else if (t.startsWith('Scenario:') || t.startsWith('Scenario Outline:')) {
+              current = { type: 'Scenario', name: t.replace(/Scenario( Outline)?:/, '').trim(), steps: [] };
+              result.push(current);
+            } else if (t.match(/^(Given|When|Then|And|But)\s/)) {
+              if (current && current.steps) {
+                current.steps.push(t);
+              }
+            }
+          }
+          return result;
         },
         analyzeCodebase: async (customWrapper?: string) => {
           return analyzer.analyze(root, customWrapper);
@@ -128,17 +133,22 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         },
         parseHtml: (htmlStr: string) => {
 
-           const $ = cheerio.load(htmlStr);
-           // Exposing basic extractors since passing native Cheerio instances across context boundary loses prototype methods.
-           return {
-             extractText: (selector: string) => $(selector).map((_, el) => $(el).text()).get(),
-             extractAttr: (selector: string, attr: string) => $(selector).map((_, el) => $(el).attr(attr)).get(),
-             html: () => $.html()
-           };
+          const $ = cheerio.load(htmlStr);
+          // Exposing basic extractors since passing native Cheerio instances across context boundary loses prototype methods.
+          return {
+            extractText: (selector: string) => $(selector).map((_, el) => $(el).text()).get(),
+            extractAttr: (selector: string, attr: string) => $(selector).map((_, el) => $(el).attr(attr)).get(),
+            html: () => $.html()
+          };
         }
       };
 
       const result = await sandbox.execute(script, apiRegistry, { timeoutMs, projectRoot: root });
+      
+      if (!result.success) {
+        throw McpErrors.sandboxApiFailed(`Sandbox execution failed: ${result.error}`, undefined, 'execute_sandbox_code');
+      }
+
       return textResult(JSON.stringify(result, null, 2));
     }
   );

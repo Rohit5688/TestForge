@@ -1,0 +1,17 @@
+{
+  "features/saucedemo.feature": {
+    "hash": "ba7cd6fe0dbfb665071815edaa220d431d237cda0ae5b8427af4e977e038921f"
+  },
+  "pages/LoginPage.ts": {
+    "hash": "aa71eed5c119eea2ff240cf066c739bd0f5a13db935138503944d63fe02e5dde"
+  },
+  "pages/InventoryPage.ts": {
+    "hash": "6915b39d9cdcea3a295c8457d07efafc8740922b4f741c297b63e2562f839709"
+  },
+  "pages/CartPage.ts": {
+    "hash": "5122169f622323ff4605a9eaf07069928bf2473e4a7f1d56fbf57232255c39b5"
+  },
+  "step-definitions/saucedemo.steps.ts": {
+    "hash": "8307f526e52d67e61c7476713c6f277169ea285ca6fe8ad569907bd7df5cb330"
+  }
+}

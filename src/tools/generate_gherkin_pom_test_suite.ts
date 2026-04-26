@@ -2,10 +2,66 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult, truncate } from "./_helpers.js";
+import { McpErrors } from "../types/ErrorSystem.js";
 import type { TestGenerationService } from "../services/generation/TestGenerationService.js";
 import type { McpConfigService } from "../services/config/McpConfigService.js";
 import { DEFAULT_CONFIG } from "../services/config/McpConfigService.js";
 import type { CodebaseAnalysisResult } from "../interfaces/ICodebaseAnalyzer.js";
+
+/**
+ * W2: Cheap generation plan preview.
+ * Infers screens from testDescription (keyword heuristics), lists expected outputs.
+ * No analysis, no LLM call, no file reads.
+ */
+function buildGenerationPlan(testDescription: string, projectRoot: string, customWrapper?: string): string {
+  const desc = testDescription.toLowerCase();
+
+  // Infer screens from keywords
+  const screenKeywords: Record<string, string> = {
+    login: 'LoginPage', signup: 'SignupPage', register: 'SignupPage',
+    dashboard: 'DashboardPage', home: 'HomePage', profile: 'ProfilePage',
+    cart: 'CartPage', checkout: 'CheckoutPage', payment: 'PaymentPage',
+    product: 'ProductPage', search: 'SearchPage', settings: 'SettingsPage',
+    order: 'OrderPage', confirm: 'ConfirmationPage', account: 'AccountPage'
+  };
+  const detectedScreens = Object.entries(screenKeywords)
+    .filter(([kw]) => desc.includes(kw))
+    .map(([, page]) => page);
+
+  // Deduplicate
+  const screens = [...new Set(detectedScreens)];
+  if (screens.length === 0) screens.push('MainPage'); // fallback for unrecognized flows
+
+  const featureName = testDescription.split(' ').slice(0, 5).join('_').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase();
+
+  const expectedFiles = [
+    `features/${featureName}.feature`,
+    ...screens.map(s => `pages/${s}.ts`),
+    ...screens.map(s => `step-definitions/${s.replace('Page', '').toLowerCase()}.steps.ts`)
+  ];
+
+  return [
+    `[GENERATION PLAN]`,
+    `Description  : ${testDescription}`,
+    `Project Root : ${projectRoot}`,
+    `Wrapper      : ${customWrapper || 'vasu-playwright-utils (default)'}`,
+    ``,
+    `Detected Screens (${screens.length}):`,
+    ...screens.map(s => `  • ${s}`),
+    ``,
+    `Expected Output Files (${expectedFiles.length}):`,
+    ...expectedFiles.map(f => `  • ${f}`),
+    ``,
+    `Rules that apply:`,
+    `  • ONE jsonPageObjects entry per detected screen`,
+    `  • ONE jsonSteps entry per feature file (step-file-per-page MUST)`,
+    `  • PO instances declared ONCE at top of each step file`,
+    `  • setPage(page) required in first Given step (playwright-bdd)`,
+    ``,
+    `If this plan is correct, call generate_gherkin_pom_test_suite again WITHOUT preview:true.`,
+    `If screens are wrong, refine testDescription and re-run preview.`
+  ].join('\n');
+}
 
 export function registerGenerateGherkinPomTestSuite(server: McpServer, container: ServiceContainer) {
   const generator = container.resolve<TestGenerationService>("generator");
@@ -33,13 +89,19 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         "testDescription": z.string().describe("Plain English test intent."),
         "baseUrl": z.string().optional(),
         "customWrapperPackage": z.string().optional(),
+        "preview": z.boolean().optional().describe("When true, returns a [GENERATION PLAN] showing expected screens, files, and wrapper state — without generating the full prompt. Use to validate intent before spending tokens."),
         "domJsonContext": z.string().optional().describe("Optional: JSON string of elements from inspect_page_dom(returnFormat:'json'). When provided, locators are injected into the generation prompt as explicit field references."),
         "testContext": z.string().optional().describe("Optional: JSON string of TestContext from gather_test_context. When provided, verified DOM elements and network calls are injected into the generation prompt, enabling first-pass correct selector and waitForResponse generation.")
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false }
     },
     async (args) => {
-      const { projectRoot, testDescription, baseUrl, customWrapperPackage, domJsonContext, testContext } = args as any;
+      const { projectRoot, testDescription, baseUrl, customWrapperPackage, domJsonContext, testContext, preview } = args as any;
+
+      // W2: Preview mode — return generation plan without running analysis or prompt build
+      if (preview) {
+        return textResult(buildGenerationPlan(testDescription, projectRoot, customWrapperPackage));
+      }
 
       // 1. Ensure project metadata is available
       let analysis = analysisCache.get(projectRoot);
@@ -47,8 +109,15 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         await maintenance.ensureUpToDate(projectRoot);
         const config = mcpConfig.read(projectRoot);
         const resolvedWrapper = customWrapperPackage || config.basePageClass;
-        analysis = await analyzer.analyze(projectRoot, resolvedWrapper);
-        analysisCache.set(projectRoot, analysis as CodebaseAnalysisResult);
+        try {
+          analysis = await analyzer.analyze(projectRoot, resolvedWrapper);
+          analysisCache.set(projectRoot, analysis as CodebaseAnalysisResult);
+        } catch (e: any) {
+          throw McpErrors.projectValidationFailed(
+            `Failed to analyze project at "${projectRoot}": ${e?.message ?? String(e)}. Ensure the project is a valid TestForge project and call check_playwright_ready first.`,
+            'generate_gherkin_pom_test_suite'
+          );
+        }
       }
 
       // 2. Fetch cached DOM context if not provided
@@ -78,17 +147,13 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         }
       }
 
-      // 4. Generate the rigid core prompt
-      if (!analysis) {
-          throw new Error(`Analysis missing for project: ${projectRoot}`);
-      }
-
       // 4. Parse testContext string if provided
       let parsedTestContext = undefined;
       if (typeof testContext === 'string' && testContext.trim().length > 0) {
         try {
           parsedTestContext = JSON.parse(testContext);
         } catch (e) {
+          console.warn(`[generate_gherkin_pom_test_suite] testContext JSON parse failed — proceeding without verified DOM context: ${e instanceof Error ? e.message : e}`);
           // ignore parsing error, pass undefined
         }
       } else if (typeof testContext === 'object') {

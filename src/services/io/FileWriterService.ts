@@ -149,13 +149,14 @@ export class FileWriterService {
       if (file.path.endsWith('.ts') || file.path.endsWith('.js')) {
         try {
           ASTScrutinizer.scrutinize(file.content, file.path);
-        } catch (stubError: any) {
+          ASTScrutinizer.scrutinizeCompliance(file.content, file.path);
+        } catch (validationError: any) {
           return JSON.stringify({
             success: false,
-            phase: 'stub-hunter',
-            error: stubError.message || String(stubError),
+            phase: 'compliance-audit',
+            error: validationError.message || String(validationError),
             file: file.path,
-            hint: 'The code is incomplete. You generated a stub, empty block, or TODO. You MUST provide the full, working implementation without placeholders before writing.'
+            hint: 'The code violates TestForge architecture standards (e.g. using native Playwright locators or networkidle). Use vasu-playwright-utils instead.'
           }, null, 2);
         }
       }

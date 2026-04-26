@@ -1,5 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import * as fs from "fs";
+import * as path from "path";
 import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult } from "./_helpers.js";
 import { TestRunnerService } from "../services/execution/TestRunnerService.js";
@@ -8,19 +10,22 @@ import { JsonToStepsTranspiler } from "../utils/JsonToStepsTranspiler.js";
 import { OrchestrationService } from "../services/system/OrchestrationService.js";
 import type { SelfHealingService } from "../services/execution/SelfHealingService.js";
 import type { CodebaseAnalysisResult } from "../interfaces/ICodebaseAnalyzer.js";
+import { LastResultStore } from "../services/system/LastResultStore.js";
+import { McpErrors } from "../types/ErrorSystem.js";
 
 export function registerValidateAndWrite(server: McpServer, container: ServiceContainer) {
   const runner = container.resolve<TestRunnerService>("runner");
   const orchestration = container.resolve<OrchestrationService>("orchestrator");
   const healer = container.resolve<SelfHealingService>("healer");
   const analysisCache = container.resolve<Map<string, CodebaseAnalysisResult>>("analysisCache");
+  const contextManager = container.resolve<any>("contextManager");
 
   server.registerTool(
     "validate_and_write",
     {
       description: `TRIGGER: After generating code content in memory.
-RETURNS: You pass the structured files to write as an array.
-NEXT: Evaluate output → Proceed
+RETURNS: On success — [WRITE DIFF] block (✅ created / ✏️ modified per file with line count) + test run summary. On failure — [REJECTION] block with exact file + violated pattern.
+NEXT: If [REJECTION] → fix flagged pattern → retry. If verification failed → call self_heal_test (context auto-stored).
 COST: Low
 ERROR_HANDLING: Standard
 
@@ -95,8 +100,23 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       try {
         writeResult = await orchestration.createTestAtomically(projectRoot, resolvedFiles);
       } catch (e) {
-        return textResult(`Validation or Writing failed: ${e instanceof Error ? e.message : String(e)}`);
+        const msg = e instanceof Error ? e.message : String(e);
+        const fileMatch = msg.match(/(?:in file|file:?)\s+([^\s,]+)/i);
+        const patternMatch = msg.match(/(?:native locator|pattern|violation|found):\s*(.+?)(?:\n|$)/i);
+        const detail = [
+          `[REJECTION] Validation failed — do NOT retry blindly.`,
+          fileMatch ? `  File: ${fileMatch[1]}` : '',
+          patternMatch ? `  Violated pattern: ${patternMatch[1]?.trim()}` : '',
+          `  Raw error: ${msg}`,
+          `NEXT: Fix the flagged pattern in generated content then call validate_and_write again.`
+        ].filter(Boolean).join('\n');
+        const errorOpts: Record<string, any> = { suggestedNextTools: ['validate_and_write', 'execute_sandbox_code'] };
+        if (fileMatch) {
+          errorOpts.file = fileMatch[1];
+        }
+        throw McpErrors.projectValidationFailed(detail, 'validate_and_write', errorOpts);
       }
+
 
       if (dryRun) {
         return textResult(`Dry run successful. Files that would be written:\n${writeResult.filesWritten.join("\n")}`);
@@ -105,31 +125,51 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       // 3. Verification run
       let testResultRaw = await runner.runTests(projectRoot);
 
+      // Write to shared store so self_heal_test auto-loads context if verification fails
+      LastResultStore.getInstance().write({
+        projectRoot,
+        passed: testResultRaw.passed,
+        output: testResultRaw.output,
+        failureClass: null,
+        failedLocators: [],
+        timestamp: Date.now(),
+      });
+
       // If success, cleanup context
       if (testResultRaw.passed) {
         try {
-          const contextManager = container.resolve<any>("contextManager");
           contextManager.purgeOldContext(projectRoot);
         } catch {
           // Ignore context purge errors
         }
-        
+
         // Invalidate analysis cache as structure changed
         analysisCache.delete(projectRoot);
       } else {
-          // If verification failed, wrap failure with healing instructions
-          const analysis = await healer.analyzeFailure(testResultRaw.output, '', 'default', projectRoot);
-          if (analysis.canAutoHeal) {
-              return textResult(
-                  `Files written, but verification failed.\n\n` +
-                  `HEALING INSTRUCTIONS:\n${analysis.healInstruction}\n\n` +
-                  `Original Output:\n${testResultRaw.output}`
-              );
-          }
+        // If verification failed, wrap failure with healing instructions
+        const analysis = await healer.analyzeFailure(testResultRaw.output, '', 'default', projectRoot);
+        if (analysis.canAutoHeal) {
+          return textResult(
+            `Files written, but verification failed.\n\n` +
+            `HEALING INSTRUCTIONS:\n${analysis.healInstruction}\n\n` +
+            `Original Output:\n${testResultRaw.output}`
+          );
+        }
+      }
+
+      // Build [WRITE DIFF] block — line-count delta per file
+      const diffLines: string[] = ['[WRITE DIFF]'];
+      for (const f of writeResult.filesWritten) {
+        const absPath = path.isAbsolute(f) ? f : path.join(projectRoot, f);
+        const newContent = resolvedFiles.find((rf: any) => path.join(projectRoot, rf.path) === absPath || rf.path === f);
+        const newLines = newContent ? newContent.content.split('\n').length : 0;
+        const existed = fs.existsSync(absPath);
+        diffLines.push(`  ${existed ? '✏️ modified' : '✅ created'} ${f} (${newLines} lines)`);
       }
 
       return textResult(
-        `Files written successfully:\n${writeResult.filesWritten.join("\n")}\n\n` +
+        `Files written successfully:\n${writeResult.filesWritten.join('\n')}\n\n` +
+        `${diffLines.join('\n')}\n\n` +
         `Initial verification run:\n${testResultRaw.output}`
       );
     }

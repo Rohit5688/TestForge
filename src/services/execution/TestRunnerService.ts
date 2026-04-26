@@ -127,9 +127,10 @@ export class TestRunnerService implements ITestRunner {
         aggregatedStderr += stderr + '\n';
       }
 
+      const summary = TestRunnerService.parseStructuredSummary(aggregatedStdout + aggregatedStderr);
       return {
         passed: true,
-        output: `[SUCCESS] Tests passed!\n\nStandard Output:\n${aggregatedStdout.trim()}\n\nStandard Error:\n${aggregatedStderr.trim()}` + ExtensionLoader.loadExtensionsForPrompt(projectRoot)
+        output: summary + `\n\n[RAW OUTPUT]\n${aggregatedStdout.trim()}\n${aggregatedStderr.trim()}` + ExtensionLoader.loadExtensionsForPrompt(projectRoot)
       };
     } catch (error) {
       // Check if the error is a timeout kill
@@ -141,10 +142,95 @@ export class TestRunnerService implements ITestRunner {
       }
       // In JS, exec throws if exit code is not 0, which happens on test failures.
       const msg = error instanceof Error ? error.message : String(error);
+      const rawOut = `${(error as any)?.stdout || ''}\n${(error as any)?.stderr || ''}`;
+      const summary = TestRunnerService.parseStructuredSummary(rawOut + '\n' + msg);
       return {
         passed: false,
-        output: `[FAILED] Tests failed or failed to compile.\n\nCommand Error:\n${msg}\n\nStandard Output:\n${(error as any)?.stdout || ''}\n\nStandard Error:\n${(error as any)?.stderr || ''}` + ExtensionLoader.loadExtensionsForPrompt(projectRoot)
+        output: summary + `\n\n[RAW OUTPUT]\n${msg}\n${rawOut}` + ExtensionLoader.loadExtensionsForPrompt(projectRoot)
       };
     }
+  }
+
+  /**
+   * Parses Playwright/BDD terminal output into a compact structured summary.
+   * Prepended before raw output so LLM reads signal first without parsing the full log.
+   */
+  private static parseStructuredSummary(raw: string): string {
+    const lines = raw.split(/\r?\n/);
+    let passed = 0, failed = 0, skipped = 0;
+    for (const line of lines) {
+      const m = line.match(/(\d+)\s+(passed|failed|skipped)/);
+      if (m) {
+        const n = parseInt(m[1]!, 10);
+        if (m[2] === 'passed') passed = n;
+        else if (m[2] === 'failed') failed = n;
+        else if (m[2] === 'skipped') skipped = n;
+      }
+    }
+    const failures: { test: string; error: string }[] = [];
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i]!;
+      if (/^\s{0,4}●\s+/.test(line)) {
+        const testName = line.replace(/^\s*●\s+/, '').trim();
+        let errLine = '';
+        for (let j = i + 1; j < Math.min(i + 8, lines.length); j++) {
+          const candidate = lines[j]!.trim();
+          if (candidate.length > 0 && !candidate.startsWith('at ')) {
+            errLine = candidate.slice(0, 140);
+            break;
+          }
+        }
+        failures.push({ test: testName, error: errLine });
+      }
+    }
+    const status = failed > 0 ? '❌ FAILED' : '✅ PASSED';
+    let summary = `[TEST SUMMARY] ${status} | passed: ${passed} | failed: ${failed} | skipped: ${skipped}`;
+    if (failures.length > 0) {
+      summary += '\n[FAILURES]';
+      for (const f of failures) {
+        summary += `\n  • ${f.test}`;
+        if (f.error) summary += `\n    → ${f.error}`;
+      }
+      // Auto-classify failure for LLM — eliminates reasoning step
+      summary += '\n' + TestRunnerService.classifyErrorDna(raw);
+    }
+    return summary;
+  }
+
+  /**
+   * Classifies the raw output into a failure category with a suggested next tool.
+   * Emitted as [ERROR DNA] block so LLM skips triage and goes straight to fix.
+   */
+  private static classifyErrorDna(raw: string): string {
+    type DnaEntry = { failureClass: string; reason: string; suggestedTool: string };
+    const rules: Array<{ pattern: RegExp; entry: DnaEntry }> = [
+      {
+        pattern: /element.*not found|locator.*resolved to \d+ element|waiting for getBy|waiting for locator|toBeVisible.*failed|no element.*matching/i,
+        entry: { failureClass: 'selector', reason: 'Locator did not resolve to a unique element.', suggestedTool: 'self_heal_test → inspect_page_dom' }
+      },
+      {
+        pattern: /Cannot find module|SyntaxError|error TS\d+|Object is not a function|is not a function|TypeError.*undefined/i,
+        entry: { failureClass: 'compile', reason: 'TypeScript/module error — code will not run.', suggestedTool: 'Fix imports/types then re-run' }
+      },
+      {
+        pattern: /Timeout.*exceeded|waiting for.*toContainText|waiting for.*toHaveText|TimeoutError/i,
+        entry: { failureClass: 'timing', reason: 'Assertion raced against async DOM update.', suggestedTool: 'analyze_trace → add waitForResponse or waitForSelector' }
+      },
+      {
+        pattern: /net::|ECONNREFUSED|ERR_CONNECTION|fetch failed|network timeout/i,
+        entry: { failureClass: 'network', reason: 'App/API unreachable during test.', suggestedTool: 'check_playwright_ready → verify baseUrl' }
+      },
+      {
+        pattern: /Expected.*Received|toContainText.*failed|toHaveText.*failed|toHaveURL.*failed|AssertionError/i,
+        entry: { failureClass: 'logic', reason: 'App returned wrong data — not a scripting issue.', suggestedTool: 'export_bug_report → file as app defect' }
+      },
+    ];
+
+    for (const { pattern, entry } of rules) {
+      if (pattern.test(raw)) {
+        return `[ERROR DNA] class: ${entry.failureClass} | reason: ${entry.reason} | next: ${entry.suggestedTool}`;
+      }
+    }
+    return `[ERROR DNA] class: unknown | reason: Could not classify. | next: self_heal_test with full rawError`;
   }
 }

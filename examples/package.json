@@ -1,0 +1,27 @@
+{
+  "name": "examples",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "bddgen && playwright test",
+    "test:smoke": "bddgen && playwright test --grep @smoke",
+    "test:regression": "bddgen && playwright test --grep @regression",
+    "test:e2e": "bddgen && playwright test --grep @e2e",
+    "test:headed": "bddgen && playwright test --headed",
+    "test:report": "playwright show-report",
+    "test:gen": "npx bddgen",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.9.0",
+    "@faker-js/faker": "^8.4.1",
+    "@types/node": "^20.0.0",
+    "dotenv": "^16.4.5",
+    "playwright-bdd": "^8.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  },
+  "dependencies": {
+    "vasu-playwright-utils": "^1.25.0"
+  }
+}

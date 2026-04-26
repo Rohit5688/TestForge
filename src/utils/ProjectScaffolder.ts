@@ -7,8 +7,8 @@ export class ProjectScaffolder {
    */
   public scaffoldDirectories(projectRoot: string): string[] {
     const dirsCreated: string[] = [];
-    const dirs = ['features', 'pages', 'step-definitions', 'fixtures', 'models', 'test-data', 'test-setup'];
-    
+    const dirs = ['features', 'pages', 'step-definitions', 'fixtures', 'models', 'test-data', 'test-setup', '.claude/skills', '.claude/agents', '.cursor/rules'];
+
     for (const dir of dirs) {
       const fullPath = path.join(projectRoot, dir);
       if (!fs.existsSync(fullPath)) {
@@ -31,6 +31,7 @@ export class ProjectScaffolder {
       version: '1.0.0',
       type: 'module',
       scripts: {
+        'postinstall': 'npx vasu-pw-setup --force',
         'test': 'bddgen && playwright test',
         'test:smoke': 'bddgen && playwright test --grep @smoke',
         'test:regression': 'bddgen && playwright test --grep @regression',
@@ -42,9 +43,8 @@ export class ProjectScaffolder {
       },
       devDependencies: {
         'playwright-bdd': '^8.5.0',
-        '@playwright/test': '^1.59.1',
-        'vasu-playwright-utils': '^4.0.0',
-        'typescript': '^5.4.5',
+        'vasu-playwright-utils': '^1.25.0',
+        'typescript': '^5.0.0',
         'ts-node': '^10.9.2',
         '@types/node': '^20.0.0',
         'dotenv': '^16.4.5',
@@ -88,7 +88,6 @@ export class ProjectScaffolder {
       "  },",
       "  projects: [",
       "    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },",
-      "    { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },",
       "  ],",
       "});",
     ].join('\n');
@@ -105,9 +104,9 @@ export class ProjectScaffolder {
 
     const tsconfig = {
       compilerOptions: {
-        module: 'NodeNext',
+        module: 'ESNext',
         target: 'ES2022',
-        moduleResolution: 'NodeNext',
+        moduleResolution: 'Bundler',
         strict: true,
         skipLibCheck: true,
         esModuleInterop: true,
@@ -130,7 +129,7 @@ export class ProjectScaffolder {
 
     const basePageContent = [
       "import { Locator, expect } from '@playwright/test';",
-      "import { getPage } from 'vasu-playwright-utils';",
+      "import { getPage, getLocator, click, fill, hover, expectElementToBeVisible, selectByText, waitForPageLoadState } from 'vasu-playwright-utils';",
       "import 'dotenv/config';",
       "",
       "export class BasePage {",
@@ -147,28 +146,23 @@ export class ProjectScaffolder {
       "  }",
       "",
       "  protected async click(locator: Locator): Promise<void> {",
-      "    await locator.scrollIntoViewIfNeeded();",
-      "    await locator.waitFor({ state: 'visible' });",
-      "    await locator.click();",
+      "    await click(locator);",
       "  }",
       "",
       "  protected async fill(locator: Locator, value: string): Promise<void> {",
-      "    await locator.waitFor({ state: 'visible' });",
-      "    await locator.fill(value);",
+      "    await fill(locator, value);",
       "  }",
       "",
       "  protected async selectOption(locator: Locator, label: string): Promise<void> {",
-      "    await locator.waitFor({ state: 'visible' });",
-      "    await locator.selectOption({ label });",
+      "    await selectByText(locator, label);",
       "  }",
       "",
       "  protected async hover(locator: Locator): Promise<void> {",
-      "    await locator.scrollIntoViewIfNeeded();",
-      "    await locator.hover();",
+      "    await hover(locator);",
       "  }",
       "",
       "  protected async expectVisible(locator: Locator): Promise<void> {",
-      "    await expect(locator).toBeVisible();",
+      "    await expectElementToBeVisible(locator);",
       "  }",
       "",
       "  protected async expectText(locator: Locator, text: string): Promise<void> {",
@@ -176,18 +170,18 @@ export class ProjectScaffolder {
       "  }",
       "",
       "  async waitForStable(visibilityCheck?: Locator): Promise<void> {",
-      "    await this.page.waitForLoadState('domcontentloaded');",
-      "    if (visibilityCheck) await expect(visibilityCheck).toBeVisible();",
+      "    await waitForPageLoadState({ waitUntil: 'domcontentloaded' });",
+      "    if (visibilityCheck) await expectElementToBeVisible(visibilityCheck);",
       "  }",
       "",
       "  async closePopups(): Promise<void> {",
       "    const candidates = [",
       "      this.page.getByRole('button', { name: 'Close' }),",
-      "      this.page.locator('button.close').first(),",
-      "      this.page.locator('.modal-close').first(),",
+      "      getLocator('button.close').first(),",
+      "      getLocator('.modal-close').first(),",
       "    ];",
       "    for (const btn of candidates) {",
-      "      if (await btn.isVisible()) { await btn.click(); break; }",
+      "      if (await btn.isVisible()) { await click(btn); break; }",
       "    }",
       "  }",
       "",

@@ -15,9 +15,16 @@ export class DomInspectorService implements IDomInspector {
    *                      'json' — flat JsonElement[] array (locator + selectorArgs) for
    *                               custom-wrapper-aware POM generators.
    */
-  public async inspect(url: string, waitForSelector?: string, storageState?: string, includeIframes?: boolean, loginMacro?: LoginMacro, timeoutMs: number = 30000, enableVisualMode: boolean = false, returnFormat: DomReturnFormat = 'markdown'): Promise<string> {
+  public async inspect(url: string, waitForSelector?: string, storageState?: string, includeIframes?: boolean, loginMacro?: LoginMacro, timeoutMs: number = 30000, enableVisualMode: boolean = false, returnFormat: DomReturnFormat = 'markdown', projectRoot?: string): Promise<string> {
     let browser: Browser | null = null;
     try {
+      // B1 FIX: Playwright internally tries to set Error.stackTraceLimit which is
+      // read-only in Node 20+ strict environments. Guard it before launch.
+      try {
+        if (!Object.getOwnPropertyDescriptor(Error, 'stackTraceLimit')?.writable) {
+          Object.defineProperty(Error, 'stackTraceLimit', { writable: true, configurable: true, value: (Error as any).stackTraceLimit ?? 10 });
+        }
+      } catch { /* ignore — best-effort guard */ }
       browser = await chromium.launch({ headless: true });
 
       const contextArgs: { storageState?: string } = {};
@@ -84,7 +91,7 @@ export class DomInspectorService implements IDomInspector {
       if (enableVisualMode) {
         try {
           const buffer = await page.screenshot({ type: 'png', fullPage: true });
-          const stored = ScreenshotStorage.storeBase64(process.cwd(), 'dom-inspect', buffer.toString('base64'));
+          const stored = ScreenshotStorage.storeBase64(projectRoot || process.cwd(), 'dom-inspect', buffer.toString('base64'));
           screenshotPath = stored.filePath;
           result.screenshot = stored;
         } catch (e) {

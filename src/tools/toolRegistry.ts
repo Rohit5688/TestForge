@@ -17,6 +17,8 @@ import { registerGatherTestContext } from "./gather_test_context.js";
 import { registerDiscoverAppFlow } from "./discover_app_flow.js";
 import { registerStartSession } from "./start_session.js";
 import { registerNavigateSession } from "./navigate_session.js";
+import { registerGetProjectContract } from "./get_project_contract.js";
+import { registerListExistingSteps } from "./list_existing_steps.js";
 
 // Generation Tools
 import { registerGenerateGherkinPomTestSuite } from "./generate_gherkin_pom_test_suite.js";
@@ -37,6 +39,7 @@ import { registerAuditUtils } from "./audit_utils.js";
 import { registerAnalyzeCoverage } from "./analyze_coverage.js";
 import { registerAnalyzeCoverageGaps } from "./analyze_coverage_gaps.js";
 import { registerAnalyzeTrace } from "./analyze_trace.js";
+import { registerGetFlakySelectors } from "./get_flaky_selectors.js";
 
 // Healing & Learning Tools
 import { registerSelfHealTest } from "./self_heal_test.js";
@@ -77,6 +80,8 @@ export function registerAllTools(server: McpServer, container: ServiceContainer)
   registerDiscoverAppFlow(server, container);
   registerStartSession(server, container);
   registerNavigateSession(server, container);
+  registerGetProjectContract(server, container);
+  registerListExistingSteps(server, container);
 
   // Generation
   registerGenerateGherkinPomTestSuite(server, container);
@@ -97,6 +102,7 @@ export function registerAllTools(server: McpServer, container: ServiceContainer)
   registerAnalyzeCoverage(server, container);
   registerAnalyzeCoverageGaps(server, container);
   registerAnalyzeTrace(server, container);
+  registerGetFlakySelectors(server, container);
 
   // Healing
   registerSelfHealTest(server, container);
@@ -110,7 +116,7 @@ export function registerAllTools(server: McpServer, container: ServiceContainer)
   registerWorkflowGuide(server, container);
   registerGetTokenBudget(server, container);
   registerGetSystemState(server, container);
-  registerScanStructuralBrain(server, container);
+  registerScanStructuralBrain(server);
 
   // Recovered Tools
   registerSuggestRefactorings(server, container);

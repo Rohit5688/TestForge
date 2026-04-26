@@ -75,34 +75,51 @@ export class JsonToStepsTranspiler {
       ? '../'.repeat(stepFileDepth - 1)
       : '../';
 
+    lines.push(`import { test } from '${relativePrefix}test-setup/page-setup.js';`);
+    lines.push(`import { setPage } from 'vasu-playwright-utils/page-utils';`);
     for (const pageClass of stepFile.pageImports) {
       lines.push(`import { ${pageClass} } from '${relativePrefix}${pagesDir}/${pageClass}.js';`);
     }
     lines.push('');
-    lines.push('const { Given, When, Then } = createBdd();');
+    lines.push('const { Given, When, Then } = createBdd(test);');
+    lines.push('');
+
+    // Instantiate pages at the top level to avoid per-step overhead
+    for (const pageClass of stepFile.pageImports) {
+      const varName = pageClass.charAt(0).toLowerCase() + pageClass.slice(1);
+      lines.push(`const ${varName} = new ${pageClass}();`);
+    }
     lines.push('');
 
     // ── Steps ─────────────────────────────────────────────────────────────────
     for (const step of stepFile.steps) {
       const stepFn = step.type; // Given | When | Then
 
-      // Build fixture destructuring: always include 'page' for POM instantiation
+      // Build fixture params.
+      // playwright-bdd requires at least one fixture reference for auto-fixtures to trigger.
+      // The Given/background step must destructure `page` so autoSetup runs setPage(page).
+      const isNavigatingGiven = stepFn === 'Given' && (
+        !step.body || step.method === 'open' || step.body?.some(l => l.includes('.open(') || l.includes('.goto('))
+      );
+      const baseFixture = isNavigatingGiven ? 'page' : '';
       const fixtureParams = step.params && step.params.length > 0
-        ? `{ page }, ${step.params.join(', ')}`
-        : '{ page }';
+        ? `{ ${baseFixture} }, ${step.params.join(', ')}`
+        : `{ ${baseFixture} }`;
 
       lines.push(`${stepFn}(${JSON.stringify(step.pattern)}, async (${fixtureParams}) => {`);
 
+      // Ensure 'page' is registered if this is a navigating Given step and we didn't inject setPage
+      if (isNavigatingGiven) {
+        lines.push(`  setPage(page);`); // Require setPage import at top
+      }
+
       if (step.body && step.body.length > 0) {
-        // Complex step: raw body provided by LLM
         for (const bodyLine of step.body) {
           lines.push(`  ${bodyLine}`);
         }
       } else if (step.page && step.method) {
-        // Simple step: instantiate page object, call method
         const pageName = step.page;
         const varName = pageName.charAt(0).toLowerCase() + pageName.slice(1);
-        lines.push(`  const ${varName} = new ${pageName}(page);`);
         const argsStr = step.args && step.args.length > 0 ? step.args.join(', ') : '';
         lines.push(`  await ${varName}.${step.method}(${argsStr});`);
       }

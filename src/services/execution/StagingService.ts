@@ -36,6 +36,22 @@ export class StagingService {
         fs.writeFileSync(fullPath, file.content, 'utf-8');
       }
 
+      // 1b. Mirror existing project .ts files into staging so relative imports resolve.
+      // Staged files import things like './BasePage.js' — BasePage.ts must exist in staging.
+      const stagedPaths = new Set(files.map(f => f.path));
+      StagingService.mirrorProjectTs(projectRoot, projectRoot, stagingDir, stagedPaths);
+
+      // 1c. Symlink project node_modules and config files so resolution works.
+      const symlinkFiles = ['node_modules', 'package.json', 'playwright.config.ts'];
+      for (const file of symlinkFiles) {
+        const projectFile = path.join(projectRoot, file);
+        const stagingFile = path.join(stagingDir, file);
+        if (fs.existsSync(projectFile) && !fs.existsSync(stagingFile)) {
+          const isDir = fs.statSync(projectFile).isDirectory();
+          fs.symlinkSync(projectFile, stagingFile, isDir ? 'junction' : 'file');
+        }
+      }
+
       // 2. Validate TypeScript if there are .ts files
       const tsFiles = files.filter(f => f.path.endsWith('.ts'));
       if (tsFiles.length > 0) {
@@ -51,17 +67,17 @@ export class StagingService {
           const stagingTsconfig = {
             extends: relativeExtends,
             compilerOptions: {
-              baseUrl: relativeRoot,
-              rootDir: relativeRoot,
-              noEmit: true
+              noEmit: true,
+              skipLibCheck: true
+              // NOTE: module/moduleResolution/target/rootDir intentionally NOT overridden here —
+              // they are inherited from the project tsconfig via 'extends'.
             },
             include: [
-              '**/*.ts',
-              `${relativeRoot}/**/*.ts`
+              '**/*.ts'
             ],
             exclude: [
               `${relativeRoot}/node_modules`,
-              `${relativeRoot}/.mcp-staging` // TestForge `.mcp-staging` path exclusion just in case
+              `${relativeRoot}/.mcp-staging`
             ]
           };
           targetTsconfigPath = path.join(stagingDir, 'tsconfig.json');
@@ -73,7 +89,7 @@ export class StagingService {
         try {
           if (hasTsConfig) {
             await execFileAsync(npxCmd, ['tsc', '--noEmit', '--project', targetTsconfigPath], {
-              cwd: projectRoot, // Execute from project root so node_modules resolve
+              cwd: projectRoot, // cwd=projectRoot so node_modules are found by Node resolution
               shell: process.platform === 'win32'
             });
           } else {
@@ -93,7 +109,11 @@ export class StagingService {
         } catch (error: any) {
           const rawOutput: string = error.stderr || error.stdout || error.message;
           const formattedError = StagingService.parseTscErrors(rawOutput, stagingDir, files.map(f => f.path));
-          throw new McpError(formattedError, McpErrorCode.TS_COMPILE_FAILED);
+          // Empty string = only pre-existing project files have errors, not LLM-generated files.
+          // Treat as success — do not block writing.
+          if (formattedError) {
+            throw new McpError(formattedError, McpErrorCode.TS_COMPILE_FAILED);
+          }
         }
       }
 
@@ -112,6 +132,44 @@ export class StagingService {
       } catch (e) { }
     }
   }
+
+  /**
+   * Recursively copies existing project .ts files into stagingDir,
+   * skipping noise dirs and files the LLM is already generating.
+   */
+  private static mirrorProjectTs(
+    baseDir: string,
+    currentDir: string,
+    stagingDir: string,
+    stagedPaths: Set<string>
+  ): void {
+    const SKIP_DIRS = new Set(['node_modules', '.features-gen', 'dist', '.mcp-staging']);
+    // Skip sub-directories that have their own tsconfig.json — they are standalone
+    // sub-projects with their own path aliases that won't resolve in staging context.
+    if (currentDir !== baseDir && fs.existsSync(path.join(currentDir, 'tsconfig.json'))) {
+      return;
+    }
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      const fullSrc = path.join(currentDir, entry.name);
+      const relative = path.relative(baseDir, fullSrc).replace(/\\/g, '/');
+      if (entry.isDirectory()) {
+        StagingService.mirrorProjectTs(baseDir, fullSrc, stagingDir, stagedPaths);
+      } else if (entry.name.endsWith('.ts') && !stagedPaths.has(relative)) {
+        const dest = path.join(stagingDir, relative);
+        const destDir = path.dirname(dest);
+        if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+        if (!fs.existsSync(dest)) fs.copyFileSync(fullSrc, dest);
+      }
+    }
+  }
+
 
   /**
    * Parses raw tsc --noEmit output into a targeted, root-cause-first error message.
@@ -187,6 +245,13 @@ export class StagingService {
     const rootCause = (parsed.find(e => e.isLlmFile) ?? parsed[0])!;
     const llmErrors = parsed.filter(e => e.isLlmFile);
     const cascadeCount = parsed.length - llmErrors.length;
+
+    // If ALL errors are in mirrored project files (not LLM-generated), treat as success.
+    // Pre-existing project errors are not our responsibility to block generation on.
+    if (llmErrors.length === 0) {
+      return '';  // Empty string = no error = success
+    }
+
 
     const lines: string[] = [
       `🔴 TypeScript Compilation Failed — ${llmErrors.length} error(s) in generated files` +

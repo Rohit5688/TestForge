@@ -121,7 +121,7 @@ container.register("bugReport", () => new BugReportService());
 container.register("dnaTracker", () => new DnaTrackerService());
 container.register("traceAnalyzer", () => new TraceAnalyzerService());
 container.register("gatherer", () => new TestContextGathererService());
-container.register("structuralBrain", () => StructuralBrainService.getInstance());
+container.register("structuralBrain", () => new StructuralBrainService(process.cwd()));
 container.register("orchestrator", (c) => new OrchestrationService(
   c.resolve("fileWriter"),
   c.resolve("healer"),

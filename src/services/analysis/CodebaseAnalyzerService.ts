@@ -52,7 +52,8 @@ export class CodebaseAnalyzerService implements ICodebaseAnalyzer {
     result.mcpConfig = {
       version: config.version || '0.0.0',
       upgradeNeeded: (config.version || '0.0.0') < DEFAULT_CONFIG.version,
-      allowedTags: config.tags
+      allowedTags: config.tags,
+      ...(config.setPageRequired !== undefined ? { setPageRequired: config.setPageRequired } : {})
     };
 
     const depService = new DependencyService();
@@ -324,7 +325,7 @@ RULES FOR AI:
           if (tsconfig.compilerOptions?.paths) {
             result.importAliases = tsconfig.compilerOptions.paths;
           }
-        } catch(e) { }
+        } catch (e) { console.warn(`[CodebaseAnalyzerService] Failed to parse tsconfig.json at ${tsconfigPath}: ${e instanceof Error ? e.message : e}`); }
       }
 
       // 6c. Parse package.json for Execution Scripts
@@ -336,12 +337,12 @@ RULES FOR AI:
            if (pkg.scripts) {
              result.packageScripts = pkg.scripts;
            }
-        } catch(e) {}
+        } catch (e) { console.warn(`[CodebaseAnalyzerService] Failed to parse package.json scripts at ${packageJsonPath}: ${e instanceof Error ? e.message : e}`); }
       }
 
       // 7. Discover existing Env Files
       let rootFiles: string[] = [];
-      try { rootFiles = await fs.readdir(projectRoot); } catch(e) {}
+      try { rootFiles = await fs.readdir(projectRoot); } catch (e) { console.warn(`[CodebaseAnalyzerService] Cannot readdir projectRoot ${projectRoot}: ${e instanceof Error ? e.message : e}`); }
       const envFiles = rootFiles.filter(f => f.startsWith('.env') && !f.endsWith('.example'));
       let hasCustomConfigDir = false;
       try {
@@ -425,7 +426,7 @@ RULES FOR AI:
           for (const m of methodMatch) {
              usedMethods.add(m[1] as string);
           }
-        } catch {}
+        } catch (e) { console.warn(`[CodebaseAnalyzerService] Cannot read step file ${def.file}: ${e instanceof Error ? e.message : e}`); }
       }
 
       result.unusedPomMethods = [];
@@ -502,7 +503,7 @@ RULES FOR AI:
           results.push(fullPath);
         }
       }
-    } catch(e) {}
+    } catch (e) { console.warn(`[CodebaseAnalyzerService] Cannot readdir ${dir}: ${e instanceof Error ? e.message : e}`); }
     return results;
   }
 

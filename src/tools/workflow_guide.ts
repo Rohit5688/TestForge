@@ -21,34 +21,42 @@ export function registerWorkflowGuide(server: McpServer, container: ServiceConta
           "steps": [
             "1. Call setup_project(projectRoot) to bootstrap the directory.",
             "2. Edit mcp-config.json and set baseUrl.",
-            "3. Call check_environment(projectRoot) to verify node_modules and browser binaries."
+            "3. Call check_environment(projectRoot) to verify node_modules and browser binaries.",
+            "4. Call get_project_contract(projectRoot) to warm-start — returns framework, wrapper, dirs, executionCommand in one call."
           ]
         },
         "write_test": {
           "description": "Standard flow for creating and verifying a new automated test.",
           "steps": [
-            "1. Call inspect_page_dom(url, returnFormat:'json') to fetch semantic locators.",
-            "2. Call generate_gherkin_pom_test_suite with testDescription.",
-            "3. Call validate_and_write with the generated files to save and run initial verification."
+            "1. Call get_project_contract(projectRoot) FIRST — confirms wrapper methods, dirs, executionCommand. Eliminates guessing.",
+            "2. Call inspect_page_dom(url, returnFormat:'json') to fetch semantic locators + quality warnings.",
+            "3. Call generate_gherkin_pom_test_suite with testDescription. Use preview:true to see plan before writing.",
+            "4. Call validate_and_write with generated files. Read [WRITE DIFF] on success, [REJECTION] on failure.",
+            "5. If verification failed → call self_heal_test — context is auto-loaded from validate_and_write run."
           ]
         },
         "run_and_heal": {
           "description": "Fix a failing test caused by brittle selectors or application changes.",
           "steps": [
-            "1. Call run_playwright_test(projectRoot) and identify the failure DNA.",
-            "2. Call self_heal_test(errorDna) to get fix instructions.",
-            "3. Call verify_selector(candidate) followed by validate_and_write with updated Page Object lines."
+            "1. Call scan_structural_brain(projectRoot) before editing — check if target file is a god node.",
+            "2. Call run_playwright_test(projectRoot). Read [FAILURES] block directly — skip log parsing.",
+            "3. Call self_heal_test — errorDna auto-loaded if omitted. Returns [RIPPLE AUDIT] of affected files.",
+            "4. Call verify_selector(candidate) to confirm fix live before writing.",
+            "5. Call validate_and_write with updated Page Object lines."
           ]
         },
         "debug_flaky": {
-          "description": "Analyze non-deterministic failures using trace observability.",
+          "description": "Analyze non-deterministic failures using trace observability and flakiness history.",
           "steps": [
-            "1. Call analyze_trace(projectRoot) for the failing run.",
-            "2. Review pending XHR/fetch calls and action timing analysis.",
-            "3. Update step definitions with explicit waitForResponse() or state assertions."
+            "1. Call get_flaky_selectors(projectRoot) — returns selectors ranked by fail count. ≥5 fails = permanent replace, not re-heal.",
+            "2. Call analyze_trace(projectRoot) for the failing run — surfaces pending XHR/action timing.",
+            "3. Review pending XHR/fetch calls and action timing analysis.",
+            "4. Update step definitions with explicit waitForResponse() or state assertions.",
+            "5. Call heal_and_verify_atomically for high-frequency flaky selectors to lock the fix."
           ]
         }
       };
+
 
       if (workflow && workflow !== "all") {
         return textResult(JSON.stringify({ [workflow]: workflows[workflow] }, null, 2));

@@ -34,7 +34,7 @@ export class DependencyService {
         if (allDeps['@playwright/test']) hasPlaywright = true;
         if (allDeps['playwright-bdd']) hasPlaywrightBdd = true;
         if (allDeps['@cucumber/cucumber']) hasCucumber = true;
-      } catch { }
+      } catch (e) { console.warn(`[DependencyService] Failed to parse package.json at ${pkgPath}: ${e instanceof Error ? e.message : e}`); }
     }
 
     // Try to glean from lock files if needed, but for frameworks direct deps are usually enough
@@ -46,7 +46,7 @@ export class DependencyService {
           if (lock.packages['node_modules/@playwright/test']) hasPlaywright = true;
           if (lock.packages['node_modules/playwright-bdd']) hasPlaywrightBdd = true;
         }
-      } catch { }
+      } catch (e) { console.warn(`[DependencyService] Failed to parse package-lock.json at ${lockPath}: ${e instanceof Error ? e.message : e}`); }
     }
 
     return {

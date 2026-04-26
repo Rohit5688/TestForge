@@ -18,31 +18,22 @@ export interface GodNode {
  * Configuration stored at: .TestForge/structural-brain.json
  */
 export class StructuralBrainService {
-  private static instance: StructuralBrainService;
-
   private readonly GOD_NODE_THRESHOLD = 5;
   private readonly CRITICAL_THRESHOLD = 15;
 
-  private projectRoot?: string;
   private readonly mcpConfigService = new McpConfigService();
 
   private get brainFile(): string {
-    return path.join(this.projectRoot || process.cwd(), '.TestForge', 'structural-brain.json');
+    return path.join(this.projectRoot, '.TestForge', 'structural-brain.json');
   }
 
   private godNodes: GodNode[] = [];
   private lastScanTime: number = 0;
   private readonly SCAN_CACHE_TTL_MS = 5 * 60 * 1000;
 
-  public static getInstance(): StructuralBrainService {
-    if (!StructuralBrainService.instance) {
-      StructuralBrainService.instance = new StructuralBrainService();
-    }
-    return StructuralBrainService.instance;
-  }
+  constructor(private readonly projectRoot: string) {}
 
-  public async scanProject(projectRoot?: string, srcDir?: string): Promise<GodNode[]> {
-    this.projectRoot = projectRoot || process.cwd();
+  public async scanProject(srcDir?: string): Promise<GodNode[]> {
 
     if (this.godNodes.length > 0 && (Date.now() - this.lastScanTime) < this.SCAN_CACHE_TTL_MS) {
       return this.godNodes;
