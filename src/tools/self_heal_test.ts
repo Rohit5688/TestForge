@@ -115,6 +115,17 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         ? `\n[AUTO-INJECT] errorDna loaded from last run_playwright_test result — no manual copy needed.\n`
         : '';
 
+      // Fix-1: Hard stop signal when max attempts exhausted
+      if (result.healInstruction?.startsWith('MAX_HEAL_ATTEMPTS_REACHED')) {
+        return textResult(
+          `[HALT] ⛔ MAX HEALING ATTEMPTS REACHED\n` +
+          `You have called self_heal_test 3+ times on this failure without resolving it.\n` +
+          `MANDATORY NEXT STEP: Call request_user_clarification immediately.\n` +
+          `DO NOT call self_heal_test, run_playwright_test, or validate_and_write again until the user responds.\n\n` +
+          `Failure summary:\n${result.rawError?.slice(0, 500) ?? '(no raw error captured)'}`
+        );
+      }
+
       return textResult(autoNote + JSON.stringify(result, null, 2) + rippleBlock);
     }
   );

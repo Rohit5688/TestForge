@@ -123,6 +123,17 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       // 2. Fetch cached DOM context if not provided
       const resolvedDomContext = domJsonContext || domInspectionCache.get(projectRoot);
 
+      // Fix-2: Context gate — warn LLM when no verified DOM context exists at all
+      if (!resolvedDomContext && !testContext) {
+        return textResult(
+          `[CONTEXT MISSING] ⚠️ No verified DOM context found.\n` +
+          `For best results (first-pass correct selectors), call gather_test_context BEFORE generating tests:\n` +
+          `  → gather_test_context({ baseUrl: "<app_url>", paths: ["<page_path>"] })\n\n` +
+          `If the app is not running or you want to proceed without live inspection, call generate_gherkin_pom_test_suite again with the same parameters.\n` +
+          `WARNING: Proceeding without DOM context may result in guessed selectors that fail at runtime.`
+        );
+      }
+
       // 3. Enrich analysis with current config and users
       const config = mcpConfig.read(projectRoot);
       const mcpConfigService = container.resolve<McpConfigService>("mcpConfig");

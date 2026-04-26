@@ -80,6 +80,17 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       const resolvedFiles = [...files];
       if (jsonPageObjects) {
         for (const po of jsonPageObjects) {
+          // Fix-3: Pre-validate required fields before transpiling
+          const missingPo = ['path', 'className', 'locators', 'methods'].filter(k => !(k in po));
+          if (missingPo.length > 0) {
+            throw McpErrors.projectValidationFailed(
+              `[REJECTION] jsonPageObjects entry is missing required fields: ${missingPo.join(', ')}\n` +
+              `Entry received: ${JSON.stringify(Object.keys(po))}\n` +
+              `NEXT: Fix the jsonPageObjects entry — every entry MUST have: path, className, locators[], methods[]`,
+              'validate_and_write',
+              { suggestedNextTools: ['validate_and_write'] }
+            );
+          }
           resolvedFiles.push({
             path: po.path,
             content: JsonToPomTranspiler.transpile(po)
@@ -88,6 +99,17 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       }
       if (jsonSteps) {
         for (const steps of jsonSteps) {
+          // Fix-3: Pre-validate required fields before transpiling
+          const missingSteps = ['path', 'pageImports', 'steps'].filter(k => !(k in steps));
+          if (missingSteps.length > 0) {
+            throw McpErrors.projectValidationFailed(
+              `[REJECTION] jsonSteps entry is missing required fields: ${missingSteps.join(', ')}\n` +
+              `Entry received: ${JSON.stringify(Object.keys(steps))}\n` +
+              `NEXT: Fix the jsonSteps entry — every entry MUST have: path, pageImports[], steps[]`,
+              'validate_and_write',
+              { suggestedNextTools: ['validate_and_write'] }
+            );
+          }
           resolvedFiles.push({
             path: steps.path,
             content: JsonToStepsTranspiler.transpile(steps)
@@ -153,6 +175,14 @@ OUTPUT: Ack (<= 10 words), proceed.`,
             `Files written, but verification failed.\n\n` +
             `HEALING INSTRUCTIONS:\n${analysis.healInstruction}\n\n` +
             `Original Output:\n${testResultRaw.output}`
+          );
+        } else {
+          // Fix-3b: Hard signal when healing is not possible
+          return textResult(
+            `[HALT] ⛔ VERIFICATION FAILED — CANNOT AUTO-HEAL\n` +
+            `Files were written but tests failed and the failure cannot be auto-healed.\n` +
+            `MANDATORY NEXT STEP: Call self_heal_test to classify the failure, then call request_user_clarification if still unresolved.\n\n` +
+            `Raw failure:\n${testResultRaw.output.slice(0, 1000)}`
           );
         }
       }
