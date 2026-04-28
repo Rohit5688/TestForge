@@ -61,7 +61,7 @@ export class TokenBudgetService {
 
     const statusEmoji =
       this.sessionTokens > this.CRITICAL_THRESHOLD ? '🔴' :
-      this.sessionTokens > this.WARNING_THRESHOLD  ? '🟡' : '🟢';
+        this.sessionTokens > this.WARNING_THRESHOLD ? '🟡' : '🟢';
 
     const lines = [
       `${statusEmoji} Token Budget Report`,
