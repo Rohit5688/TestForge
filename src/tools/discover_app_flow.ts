@@ -3,6 +3,7 @@ import { z } from "zod";
 import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult, truncate } from "./_helpers.js";
 import type { NavigationGraphService } from "../services/nav/NavigationGraphService.js";
+import * as fs from "fs";
 
 export function registerDiscoverAppFlow(server: McpServer, container: ServiceContainer) {
   const getNavService = container.resolve<(projectRoot: string) => NavigationGraphService>("getNavService");
@@ -21,12 +22,23 @@ export function registerDiscoverAppFlow(server: McpServer, container: ServiceCon
     },
     async (args) => {
       const { projectRoot, startUrl, storageState, maxPages } = args as any;
+
+      // Guard: warn if storageState path provided but file does not exist
+      let resolvedStorageState = storageState;
+      let storageStateWarning = '';
+      if (storageState) {
+        if (!fs.existsSync(storageState)) {
+          storageStateWarning = `[WARN] storageState file not found at "${storageState}". Crawling WITHOUT authentication — will likely hit the login wall and discover only public pages.\nTo fix: call inspect_page_dom with saveStorageState="${storageState}" to login and save session first.\n\n`;
+          resolvedStorageState = undefined; // fall back to unauthenticated crawl
+        }
+      }
+
       const navSvc = getNavService(projectRoot);
-      const graph = await navSvc.discoverAppFlow(startUrl, storageState, maxPages ?? 25);
+      const graph = await navSvc.discoverAppFlow(startUrl, resolvedStorageState, maxPages ?? 25);
       const diagram = navSvc.exportMermaidDiagram();
       const screens = navSvc.getKnownScreens();
       const knownPaths = navSvc.getKnownPathsText();
-      const result = JSON.stringify({
+      const result = storageStateWarning + JSON.stringify({
         pagesDiscovered: Object.keys(graph.nodes).length,
         source: graph.source,
         knownScreens: screens,

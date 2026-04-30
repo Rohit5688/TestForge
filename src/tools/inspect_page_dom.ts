@@ -58,10 +58,15 @@ function detectAmbiguousLocators(jsonResult: string): string {
 }
 
 
+import type { PlaywrightSessionService } from "../services/execution/PlaywrightSessionService.js";
+import type { McpConfigService } from "../services/config/McpConfigService.js";
+
 export function registerInspectPageDom(server: McpServer, container: ServiceContainer) {
   const domInspector = container.resolve<DomInspectorService>("domInspector");
   const domInspectionCache = container.resolve<Map<string, string>>("domInspectionCache");
   const contextManager = container.resolve<ContextManager>("contextManager");
+  const sessionService = container.resolve<PlaywrightSessionService>("session");
+  const mcpConfig = container.resolve<McpConfigService>("mcpConfig");
 
   server.registerTool(
     "inspect_page_dom",
@@ -74,26 +79,42 @@ ERROR_HANDLING: Standard
 
 Navigates to a target URL in a headless browser and returns the Accessibility Tree (semantic DOM).
 
+CRITICAL RULES FOR LLM:
+- Always copy element text/name values VERBATIM from this output. NEVER author them from a screenshot — screenshots show rendered visuals (icons, images) that have no text in the DOM tree.
+- The locator strings (e.g. page.getByRole(...)) are ready to use. Copy them directly into Page Objects without modification.
+- Elements with [coordinate-fallback] have no stable selector — do NOT generate a locator for them. Flag them for manual inspection.
+
 OUTPUT: Ack (<= 10 words), proceed.`,
       inputSchema: z.object({
         "url": z.string().describe("The full URL to inspect (e.g. http://localhost:3000/login)."),
         "projectRoot": z.string().optional().describe("Optional absolute path to the automation project for loading config timeouts."),
         "waitForSelector": z.string().optional().describe("Optional selector to wait for before parsing, if page is slow to render."),
-        "returnFormat": z.enum(["markdown", "json"]).optional().describe("Output format. 'markdown' (default) returns Actionable Markdown for LLM prompts. 'json' returns flat JsonElement[] with selectorArgs — use this for custom-wrapper-aware POM generation."),
+        "returnFormat": z.enum(["markdown", "json", "yaml"]).optional().describe("Output format. 'yaml' (recommended) — compact locator list, ~60% fewer tokens than markdown. 'json' — flat JsonElement[] with selectorArgs for custom-wrapper POM generation. 'markdown' (default) — full Actionable Markdown."),
         "includeIframes": z.boolean().optional().describe("Set to true to also scrape accessibility trees inside nested iframes."),
         "storageState": z.string().optional().describe("Optional absolute path to a Playwright storageState JSON file to bypass login."),
+        "saveStorageState": z.string().optional().describe("Optional absolute path to save session cookies/storage after actionSequence completes. Use this to login once and reuse the session in subsequent calls via storageState."),
+        "enableVisualMode": z.boolean().optional().describe("If true, captures a full-page screenshot and includes the file path in output. Use to visually debug what the page looks like after action sequences."),
         "actionSequence": z.array(z.object({
-          "action": z.enum(["click", "fill", "wait", "goto"]),
+          "action": z.enum(["click", "fill", "wait", "goto", "clickText", "hover", "select", "press", "clearAndFill", "waitForSelector", "evaluate", "waitForResponse", "switchToFrame", "switchToMainFrame", "uploadFile", "switchToNewTab", "switchToTab", "closeTab"]),
           "selector": z.string().optional(),
           "value": z.string().optional(),
           "timeout": z.number().optional(),
-          "url": z.string().optional()
+          "url": z.string().optional(),
+          "frameSelector": z.string().optional()
         })).optional().describe("Optional sequence of actions to execute before parsing the DOM. Ideal for SSO logins or navigating multi-step modals.")
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }
     },
     async (args) => {
-      const { url, projectRoot, waitForSelector, returnFormat, includeIframes, storageState, actionSequence } = args as any;
+      const { url, projectRoot, waitForSelector, returnFormat, includeIframes, storageState, actionSequence, saveStorageState, enableVisualMode } = args as any;
+      // Read enableVisualExploration from mcp-config.json if not explicitly passed
+      let visualMode = !!enableVisualMode;
+      if (!visualMode && projectRoot) {
+        try {
+          const cfg = mcpConfig.read(projectRoot);
+          visualMode = !!cfg.enableVisualExploration;
+        } catch { /* soft fail */ }
+      }
       validateUrl(url);
       const format = returnFormat || 'markdown';
       const result = await domInspector.inspect(
@@ -102,10 +123,12 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         storageState,
         includeIframes,
         actionSequence,
-        30000, // timeoutMs
-        false, // enableVisualMode
+        60000, // timeoutMs — increased to support login actionSequence flows
+        visualMode, // enableVisualMode — from param or mcp-config.json enableVisualExploration
         format as any,
-        projectRoot
+        projectRoot,
+        saveStorageState,
+        sessionService?.getPage() ?? undefined // reuse active persistent session if available
       );
 
       // Record successful scan in context manager

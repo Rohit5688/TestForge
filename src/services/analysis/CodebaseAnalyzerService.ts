@@ -109,7 +109,10 @@ export class CodebaseAnalyzerService implements ICodebaseAnalyzer {
 
           // Look for step definitions (using Regex for strict BDD steps to match Playwright-BDD structure)
           const steps = ASTScrutinizer.extractSteps(content);
-          if (steps.length > 0) {
+          // Also treat class-based step helpers (e.g. RegistrationSteps, LoginSteps) as step files
+          // even if they have no Given/When/Then — they live in the steps directory and call page methods.
+          const isInStepsDir = relPath.includes('/steps/') || relPath.includes('\\steps\\');
+          if (steps.length > 0 || isInStepsDir) {
             stepDefs.push({ file: relPath, steps });
             if (result.detectedPaths.stepsRoot === config.dirs.stepDefinitions) result.detectedPaths.stepsRoot = path.dirname(relPath);
             continue;
@@ -418,15 +421,20 @@ RULES FOR AI:
         .map(([step, files]) => ({ step, files: Array.from(new Set(files)) }));
 
       // Detect Unused POM Methods
+      // Scan BOTH step files AND page object files — page methods can call other page methods.
       const usedMethods = new Set<string>();
-      for (const def of result.existingStepDefinitions) {
+      const filesToScan = [
+        ...result.existingStepDefinitions.map(d => d.file),
+        ...result.existingPageObjects.map(p => p.path),
+      ];
+      for (const file of filesToScan) {
         try {
-          const content = await fs.readFile(path.join(projectRoot, def.file), 'utf8');
+          const content = await fs.readFile(path.join(projectRoot, file), 'utf8');
           const methodMatch = content.matchAll(/\.([a-zA-Z0-9_]+)\s*\(/g);
           for (const m of methodMatch) {
              usedMethods.add(m[1] as string);
           }
-        } catch (e) { console.warn(`[CodebaseAnalyzerService] Cannot read step file ${def.file}: ${e instanceof Error ? e.message : e}`); }
+        } catch (e) { console.warn(`[CodebaseAnalyzerService] Cannot read file ${file}: ${e instanceof Error ? e.message : e}`); }
       }
 
       result.unusedPomMethods = [];
@@ -439,6 +447,114 @@ RULES FOR AI:
            result.unusedPomMethods.push({ path: po.path, unusedMethods: unused });
         }
       }
+
+      // --- Code Quality Analysis ---
+      const codeQuality: NonNullable<CodebaseAnalysisResult['codeQuality']> = {};
+
+      // Q1: God Objects — page classes with > 20 public methods
+      const GOD_METHOD_THRESHOLD = 20;
+      const godObjects = result.existingPageObjects
+        .filter(po => po.publicMethods.length > GOD_METHOD_THRESHOLD)
+        .map(po => ({ path: po.path, className: po.className || 'Unknown', methodCount: po.publicMethods.length }));
+      if (godObjects.length > 0) codeQuality.godObjects = godObjects;
+
+      // Q2: Long Methods — scan page files for methods > 30 lines
+      // Q3: Hardcoded Selectors in step files — page.locator/getBy* in non-page files
+      // Q4: Missing awaits — async calls without await in step files
+      // Q5: Large step files > 200 lines
+      const LONG_METHOD_LINES = 30;
+      const LARGE_STEP_FILE_LINES = 200;
+      const longMethods: NonNullable<typeof codeQuality.longMethods> = [];
+      const hardcodedSelectors: NonNullable<typeof codeQuality.hardcodedSelectors> = [];
+      const missingAwaits: NonNullable<typeof codeQuality.missingAwaits> = [];
+      const largeStepFiles: NonNullable<typeof codeQuality.largeStepFiles> = [];
+
+      // Regex for hardcoded selectors in step files
+      const selectorRe = /page\.(locator|getByRole|getByLabel|getByText|getByTestId|getByPlaceholder|)\s*\(/g;
+      // Regex for missing await — async page method calls not preceded by await
+      const missingAwaitRe = /(?<!await\s+)(?<!return\s+)((?:commonPage|registrationPage|loginPage|[a-z]\w*Page)\.[a-zA-Z]+\s*\()/g;
+
+      // Scan page object files for long methods (line-based heuristic)
+      for (const po of result.existingPageObjects) {
+        try {
+          const content = await fs.readFile(path.join(projectRoot, po.path), 'utf8');
+          const lines = content.split('\n');
+          // Find method start lines via simple regex
+          const methodStartRe = /^\s*(public|private|protected|async|static).*\w+\s*\([^)]*\)\s*(?::\s*\S+)?\s*\{/;
+          let inMethod = false;
+          let methodStartLine = 0;
+          let methodName = '';
+          let braceDepth = 0;
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i] ?? '';
+            if (!inMethod && methodStartRe.test(line)) {
+              const nameMatch = line.match(/(\w+)\s*\(/);
+              methodName = nameMatch?.[1] ?? 'unknown';
+              methodStartLine = i;
+              inMethod = true;
+              braceDepth = (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+            } else if (inMethod) {
+              braceDepth += (line.match(/\{/g) || []).length - (line.match(/\}/g) || []).length;
+              if (braceDepth <= 0) {
+                const methodLines = i - methodStartLine + 1;
+                if (methodLines > LONG_METHOD_LINES) {
+                  longMethods.push({ path: po.path, className: po.className || 'Unknown', method: methodName + '()', lines: methodLines });
+                }
+                inMethod = false;
+              }
+            }
+          }
+        } catch { /* soft fail */ }
+      }
+
+      // Scan step files for hardcoded selectors, missing awaits, and large file size
+      for (const def of result.existingStepDefinitions) {
+        try {
+          const content = await fs.readFile(path.join(projectRoot, def.file), 'utf8');
+          const lines = content.split('\n');
+
+          // Q5: Large step files
+          if (lines.length > LARGE_STEP_FILE_LINES) {
+            largeStepFiles.push({ path: def.file, lines: lines.length });
+          }
+
+          // Q3: Hardcoded selectors in step files (not page files)
+          const isStepNotPage = !def.file.toLowerCase().includes('/pages/');
+          if (isStepNotPage) {
+            let match: RegExpExecArray | null;
+            const re = /page\.(locator|getByRole|getByLabel|getByText|getByTestId|getByPlaceholder)\s*\(/g;
+            while ((match = re.exec(content)) !== null) {
+              const lineNum = content.slice(0, match.index).split('\n').length;
+              hardcodedSelectors.push({ path: def.file, line: lineNum, selector: match[0].trim() });
+            }
+          }
+
+          // Q4: Missing awaits — async page method calls not preceded by await
+          // Look for `pageName.method(` without preceding await on the same line
+          lines.forEach((line, idx) => {
+            const trimmed = line.trimStart();
+            // Must be inside an async context — check line doesn't start with await/return
+            const hasMissingAwait = /(?<!\bawait\s)(?<!\breturn\s)([a-z]\w*(?:Page|page)\.[a-zA-Z]+\s*\()/.test(trimmed)
+              && !trimmed.startsWith('await ')
+              && !trimmed.startsWith('return ')
+              && !trimmed.startsWith('//')
+              && !trimmed.startsWith('*')
+              && trimmed.includes('Page.');
+            if (hasMissingAwait) {
+              const expr = (trimmed.match(/([a-z]\w*(?:Page|page)\.[a-zA-Z]+\s*\()/) || [])[0] ?? '';
+              if (expr) missingAwaits.push({ path: def.file, line: idx + 1, expression: expr });
+            }
+          });
+        } catch { /* soft fail */ }
+      }
+
+      if (longMethods.length > 0) codeQuality.longMethods = longMethods;
+      if (hardcodedSelectors.length > 0) codeQuality.hardcodedSelectors = hardcodedSelectors;
+      if (missingAwaits.length > 0) codeQuality.missingAwaits = missingAwaits;
+      if (largeStepFiles.length > 0) codeQuality.largeStepFiles = largeStepFiles;
+
+      if (Object.keys(codeQuality).length > 0) result.codeQuality = codeQuality;
 
       // 9. Provide recommendation
       if (!result.bddSetup.present) {

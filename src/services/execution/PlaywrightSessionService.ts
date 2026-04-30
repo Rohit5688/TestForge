@@ -87,7 +87,7 @@ export class PlaywrightSessionService {
   /**
    * Navigates the persistent session to a URL.
    */
-  public async navigate(url: string, waitUntil: 'load' | 'domcontentloaded' | 'networkidle' = 'load', timeoutMs: number = 30000): Promise<string> {
+  public async navigate(url: string, waitUntil: 'load' | 'domcontentloaded' | 'networkidle' = 'load', timeoutMs: number = 30000, screenshot: boolean = false, projectRoot?: string): Promise<string> {
     if (!this.page) {
        // Auto-start if forgotten
        await this.startSession();
@@ -99,13 +99,26 @@ export class PlaywrightSessionService {
           finalUrl = `https://${url}`;
       }
       const response = await this.page!.goto(finalUrl, { waitUntil, timeout: timeoutMs });
-      
-      return JSON.stringify({
+
+      const result: Record<string, unknown> = {
         success: true,
         url: this.page!.url(),
         status: response?.status(),
         title: await this.page!.title()
-      }, null, 2);
+      };
+
+      // Optional screenshot — LLM "eyes" after navigation
+      if (screenshot) {
+        try {
+          const { ScreenshotStorage } = await import('../../utils/ScreenshotStorage.js');
+          const buffer = await this.page!.screenshot({ type: 'png', fullPage: false });
+          const stored = ScreenshotStorage.storeBase64(projectRoot || process.cwd(), 'navigate', buffer.toString('base64'));
+          result.screenshot = stored.filePath;
+          result.screenshotNote = 'Open this file to see what the browser sees right now.';
+        } catch { /* soft fail */ }
+      }
+
+      return JSON.stringify(result, null, 2);
     } catch (error: any) {
       return JSON.stringify({
         success: false,

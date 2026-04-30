@@ -78,6 +78,39 @@ export interface CodebaseAnalysisResult {
         path: string;
         unusedMethods: string[];
     }>;
+    /** Code quality findings for suggest_refactorings */
+    codeQuality?: {
+        /** Page classes with > 20 public methods — too much responsibility */
+        godObjects?: Array<{
+            path: string;
+            className: string;
+            methodCount: number;
+        }>;
+        /** Methods with body > 30 lines — should be extracted */
+        longMethods?: Array<{
+            path: string;
+            className: string;
+            method: string;
+            lines: number;
+        }>;
+        /** Selectors/locators used inline in step files — should be in page objects */
+        hardcodedSelectors?: Array<{
+            path: string;
+            line: number;
+            selector: string;
+        }>;
+        /** Async step functions missing await on page calls */
+        missingAwaits?: Array<{
+            path: string;
+            line: number;
+            expression: string;
+        }>;
+        /** Step files with > 200 lines — logic should be delegated to page objects */
+        largeStepFiles?: Array<{
+            path: string;
+            lines: number;
+        }>;
+    };
     duplicateInstallWarnings?: string[];
     mcpLearnDirectives?: string[];
     detectedPaths: {

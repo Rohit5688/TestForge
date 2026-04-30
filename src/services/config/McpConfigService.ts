@@ -24,6 +24,8 @@ export interface McpConfig {
     features: string;
     pages: string;
     stepDefinitions: string;
+    /** Alias for stepDefinitions — some teams use 'steps' */
+    steps?: string;
     testData: string;
   };
 
@@ -120,6 +122,12 @@ export interface McpConfig {
    * @example '@myorg/test-utils' | 'src/support/BasePage.ts'
    */
   basePageClass?: string;
+
+  /**
+   * Alias for basePageClass — preferred name for custom wrapper package.
+   * @example '@ecs-na/trifecta-framework'
+   */
+  customWrapperPackage?: string;
 
   /**
    * Whether steps should destructure { page } and explicitly set the page singleton.

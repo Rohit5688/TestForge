@@ -374,6 +374,48 @@ export class SmartDomExtractor {
     return JSON.stringify(result, null, 2);
   }
 
+  /**
+   * extractAsYaml — compact YAML-like locator list.
+   * ~60% fewer tokens than markdown. Best for large pages where token budget matters.
+   * Format per line: `- [id] role "text" → locator`
+   */
+  static extractAsYaml(rawJson: string, pageUrl: string, screenshotPath?: string): string {
+    const jsonStr = SmartDomExtractor.extractAsJson(rawJson, pageUrl);
+    let elements: JsonElement[] = [];
+    try { elements = JSON.parse(jsonStr); } catch { return '# DOM: (empty)'; }
+    if (!Array.isArray(elements) || elements.length === 0) {
+      // Even on empty DOM, surface screenshot path if taken
+      return screenshotPath
+        ? `# DOM: (empty)\n# 📸 Screenshot: ${screenshotPath}`
+        : '# DOM: (empty)';
+    }
+
+    const lines: string[] = [`# DOM: ${pageUrl}`, `# Elements: ${elements.length}`];
+    if (screenshotPath) lines.push(`# 📸 Screenshot: ${screenshotPath}`);
+    lines.push('');
+    for (const el of elements) {
+      const text = el.text ? ` "${el.text.slice(0, 50)}"` : '';
+      lines.push(`- [${el.id}] ${el.role}${text} → ${el.locator}`);
+    }
+
+    // Gap-2: append shadow DOM elements in compact yaml format
+    let rawParsed: any = null;
+    try { rawParsed = JSON.parse(rawJson); } catch { /* soft */ }
+    const shadowElsYaml: Array<{ tag: string; dataQa?: string; testId?: string; ariaLabel?: string; placeholder?: string; text?: string; role?: string; selector: string }> =
+      rawParsed?.mainFrame?.shadowElements ?? [];
+    if (shadowElsYaml.length > 0) {
+      lines.push('');
+      lines.push('# Shadow DOM:');
+      for (const e of shadowElsYaml) {
+        const label = e.dataQa ? `[data-qa="${e.dataQa}"]` : e.testId ? `[data-testid="${e.testId}"]` : e.ariaLabel ? `[aria-label="${e.ariaLabel}"]` : e.text?.slice(0, 30) ?? e.tag;
+        const sel = e.selector || e.tag;
+        lines.push(`- ${e.role ?? e.tag} ${label} → page.locator('${sel}')`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
   /** Convert Actionable Markdown back to minimal JSON (used when only ariaYaml path ran) */
   private static _markdownToJson(markdown: string): string {
     const lineRe = /^\[(\d+)\]\s+<([\w]+)(?:\s+"([^"]*)")?>.*?→\s+`(.+?)`/;
@@ -418,14 +460,30 @@ export class SmartDomExtractor {
     const elements: ActionableElement[] = [];
 
     // Main frame
+    // Extract shadow elements block (Gap-2 fix) — appended to all output paths
+    const shadowEls: Array<{ tag: string; dataQa?: string; testId?: string; ariaLabel?: string; placeholder?: string; text?: string; role?: string; selector: string }> =
+      (parsed as any).mainFrame?.shadowElements ?? [];
+    const shadowSection = shadowEls.length > 0
+      ? '\n\n---\n## Shadow DOM Elements\n' +
+        shadowEls.map(e => {
+          const label = e.dataQa ? `data-qa="${e.dataQa}"` : e.testId ? `data-testid="${e.testId}"` : e.ariaLabel ? `aria="${e.ariaLabel}"` : e.text?.slice(0, 30) ?? e.tag;
+          const sel = e.selector || e.tag;
+          return `- [${e.role ?? e.tag}] ${label} → \`page.locator('${sel}')\``;
+        }).join('\n')
+      : '';
+
     if (parsed.mainFrame) {
       // New ariaYaml envelope: from page.ariaSnapshot() (Playwright v1.44+)
       if ((parsed.mainFrame as any).ariaYaml) {
-        return screenshotBanner + SmartDomExtractor.extractFromAriaYaml((parsed.mainFrame as any).ariaYaml as string, pageUrl);
+        return screenshotBanner + SmartDomExtractor.extractFromAriaYaml((parsed.mainFrame as any).ariaYaml as string, pageUrl) + shadowSection;
       }
       if ((parsed.mainFrame as any).fallback) {
         // Fallback shape: { fallback: true, elements: [...] }
-        return screenshotBanner + SmartDomExtractor.extractFromFallbackElements((parsed.mainFrame as any).elements ?? [], pageUrl);
+        return screenshotBanner + SmartDomExtractor.extractFromFallbackElements((parsed.mainFrame as any).elements ?? [], pageUrl) + shadowSection;
+      }
+      if ((parsed.mainFrame as any).shadowOnly) {
+        // Only shadow elements found — no light DOM
+        return screenshotBanner + (shadowSection || '# DOM: (empty — no light DOM elements found)');
       }
       collectNodes(parsed.mainFrame, elements, 0);
     }
@@ -439,7 +497,7 @@ export class SmartDomExtractor {
       }
     }
 
-    return screenshotBanner + renderActionableMarkdown(elements, pageUrl);
+    return screenshotBanner + renderActionableMarkdown(elements, pageUrl) + shadowSection;
   }
 
   /** Handle the DOM fallback shape (non-AOM pages) */

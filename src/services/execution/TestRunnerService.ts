@@ -128,8 +128,9 @@ export class TestRunnerService implements ITestRunner {
       }
 
       const summary = TestRunnerService.parseStructuredSummary(aggregatedStdout + aggregatedStderr);
+      const noTestsRan = summary.includes('NO TESTS RAN');
       return {
-        passed: true,
+        passed: !noTestsRan,
         output: summary + `\n\n[RAW OUTPUT]\n${aggregatedStdout.trim()}\n${aggregatedStderr.trim()}` + ExtensionLoader.loadExtensionsForPrompt(projectRoot)
       };
     } catch (error) {
@@ -182,6 +183,16 @@ export class TestRunnerService implements ITestRunner {
         }
         failures.push({ test: testName, error: errLine });
       }
+    }
+    // Zero-test guard: if nothing ran, flag it — never silently report ✅ PASSED
+    if (passed === 0 && failed === 0 && skipped === 0) {
+      return `[TEST SUMMARY] ⚠️ NO TESTS RAN | passed: 0 | failed: 0 | skipped: 0\n` +
+        `[WARN] 0 tests matched. Possible causes:\n` +
+        `  1. TAGS env var not set and executionCommand requires it (e.g. 'npm run automated-test')\n` +
+        `  2. --grep filter matched nothing\n` +
+        `  3. bddgen specs not regenerated after .feature file changes — run: npx bddgen --config=./src/test/playwright.config.ts\n` +
+        `  4. Wrong --config path\n` +
+        `Fix: pass tags param to run_playwright_test, or run: npx playwright test --config=./src/test/playwright.config.ts`;
     }
     const status = failed > 0 ? '❌ FAILED' : '✅ PASSED';
     let summary = `[TEST SUMMARY] ${status} | passed: ${passed} | failed: ${failed} | skipped: ${skipped}`;

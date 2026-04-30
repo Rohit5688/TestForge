@@ -43,23 +43,26 @@ OUTPUT: Read returned JSON, proceed to generate or edit.`,
       const config = mcpConfig.read(projectRoot);
       const deps = depService.parseDependencies(projectRoot);
 
-      // Detect dirs from filesystem conventions
-      const featuresDir = fs.existsSync(path.join(projectRoot, 'features')) ? 'features'
-        : fs.existsSync(path.join(projectRoot, 'src/features')) ? 'src/features'
-        : 'features';
+      // Detect dirs — mcp-config.json is the source of truth.
+      // Fallback probes only generic community conventions (no team-specific paths hardcoded).
+      const featuresDir = config.dirs?.features
+        || (['features', 'src/features', 'test/features', 'e2e/features']
+            .find(d => fs.existsSync(path.join(projectRoot, d)))
+          ?? 'features');
 
-      const stepsDir = fs.existsSync(path.join(projectRoot, 'step-definitions')) ? 'step-definitions'
-        : fs.existsSync(path.join(projectRoot, 'steps')) ? 'steps'
-        : fs.existsSync(path.join(projectRoot, 'src/steps')) ? 'src/steps'
-        : 'step-definitions';
+      const stepsDir = config.dirs?.steps || config.dirs?.stepDefinitions
+        || (['step-definitions', 'steps', 'src/steps', 'e2e/steps', 'test/steps']
+            .find(d => fs.existsSync(path.join(projectRoot, d)))
+          ?? 'step-definitions');
 
-      const pagesDir = fs.existsSync(path.join(projectRoot, 'pages')) ? 'pages'
-        : fs.existsSync(path.join(projectRoot, 'src/pages')) ? 'src/pages'
-        : 'pages';
+      const pagesDir = config.dirs?.pages
+        || (['pages', 'src/pages', 'e2e/pages', 'test/pages']
+            .find(d => fs.existsSync(path.join(projectRoot, d)))
+          ?? 'pages');
 
-      // Detect wrapper methods from installed package if possible
+      // Detect wrapper — prefer customWrapperPackage from mcp-config over legacy basePageClass
       let wrapperMethods: string[] = [];
-      const wrapperPkg = config.basePageClass || 'vasu-playwright-utils';
+      const wrapperPkg = config.customWrapperPackage || config.basePageClass || 'vasu-playwright-utils';
       try {
         const pkgPath = path.join(projectRoot, 'node_modules', wrapperPkg, 'package.json');
         const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
@@ -87,11 +90,96 @@ OUTPUT: Read returned JSON, proceed to generate or edit.`,
         projectRoot
       };
 
-      return textResult(
-        `[PROJECT CONTRACT]\n${JSON.stringify(contract, null, 2)}\n\n` +
-        `Use this contract to generate correct code without additional file reads. ` +
+      // Load learnings from mcp-learning.json — compact summary (pattern only, no full solution)
+      let learningsSummary: Array<{ pattern: string; tags?: string[] }> = [];
+      const learningsPath = path.join(projectRoot, '.TestForge', 'mcp-learning.json');
+      try {
+        if (fs.existsSync(learningsPath)) {
+          const raw = JSON.parse(fs.readFileSync(learningsPath, 'utf8'));
+          const entries = Array.isArray(raw) ? raw : (raw.entries ?? raw.rules ?? []);
+          learningsSummary = entries.slice(0, 20).map((e: any) => ({
+            pattern: e.issuePattern ?? e.pattern ?? e.issue ?? String(e).slice(0, 80),
+            tags: e.tags
+          }));
+        }
+      } catch { /* soft fail */ }
+
+      // Load navigation map — compact screen list only
+      let knownScreens: string[] = [];
+      let navMapSource: string = 'none';
+      const navMapPath = path.join(projectRoot, '.TestForge', 'navigation-map.json');
+      try {
+        if (fs.existsSync(navMapPath)) {
+          const navMap = JSON.parse(fs.readFileSync(navMapPath, 'utf8'));
+          navMapSource = navMap.source ?? 'unknown';
+          knownScreens = Object.values(navMap.nodes ?? {}).map(
+            (n: any) => `${n.pageName} — ${n.url}`
+          );
+        }
+      } catch { /* soft fail */ }
+
+      const sections: string[] = [
+        `[PROJECT CONTRACT]\n${JSON.stringify(contract, null, 2)}`,
+        `\nUse this contract to generate correct code without additional file reads. ` +
         `setPageRequired=true means the first Given step MUST destructure {page} and call setPage(page).`
-      );
+      ];
+
+      if (learningsSummary.length > 0) {
+        sections.push(
+          `\n[SESSION LEARNINGS] (${learningsSummary.length} rules loaded from mcp-learning.json — apply these automatically):\n` +
+          learningsSummary.map((l, i) => `  ${i + 1}. ${l.pattern}${l.tags?.length ? ` [${l.tags.join(', ')}]` : ''}`).join('\n')
+        );
+      }
+
+      if (knownScreens.length > 0) {
+        sections.push(
+          `\n[NAVIGATION MAP] source:${navMapSource} — ${knownScreens.length} known screens:\n` +
+          knownScreens.map(s => `  • ${s}`).join('\n') +
+          `\n  → Run export_navigation_map for the full Mermaid diagram.`
+        );
+
+        // Coverage gap: cross-ref nav screens vs feature file content
+        try {
+          const featuresDirAbs = path.isAbsolute(featuresDir)
+            ? featuresDir
+            : path.join(projectRoot, featuresDir);
+
+          if (fs.existsSync(featuresDirAbs)) {
+            // Collect all .feature file content into one string for fast scanning
+            const featureContent = (function readFeatureFiles(dir: string): string {
+              let content = '';
+              for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+                const full = path.join(dir, entry.name);
+                if (entry.isDirectory()) content += readFeatureFiles(full);
+                else if (entry.name.endsWith('.feature')) content += fs.readFileSync(full, 'utf8');
+              }
+              return content;
+            })(featuresDirAbs);
+
+            const uncovered = knownScreens.filter(screen => {
+              // Extract URL path from "ScreenName — /path/to/page"
+              const urlPart = screen.split(' — ')[1] ?? '';
+              if (!urlPart || urlPart.startsWith('http')) return false;
+              // Use the last path segment (most specific) for coverage check
+              const segments = urlPart.split('/').filter(s => s.length > 3);
+              if (segments.length === 0) return false;
+              // Must match the LAST meaningful segment specifically
+              const lastSeg = segments[segments.length - 1]!;
+              return !featureContent.includes(lastSeg);
+            });
+
+            if (uncovered.length > 0) {
+              sections.push(
+                `\n[COVERAGE GAPS] ${uncovered.length} screen(s) with no feature file coverage:\n` +
+                uncovered.map(s => `  ⚠️ ${s}`).join('\n') +
+                `\n  → Consider adding feature files for these screens.`
+              );
+            }
+          }
+        } catch { /* soft fail — never block contract load */ }
+      }
+
+      return textResult(sections.join(''));
     }
   );
 }

@@ -141,7 +141,20 @@ OUTPUT: Ack (<= 10 words), proceed.`,
 
 
       if (dryRun) {
-        return textResult(`Dry run successful. Files that would be written:\n${writeResult.filesWritten.join("\n")}`);
+        const diffLines: string[] = ['[DRY RUN] Validation ✅ passed. Nothing written to disk.\n'];
+        for (const f of resolvedFiles) {
+          const absPath = path.isAbsolute(f.path) ? f.path : path.join(projectRoot, f.path);
+          const exists = fs.existsSync(absPath);
+          const lines = f.content.split('\n');
+          const lineCount = lines.length;
+          const status = exists ? '✏️  modified' : '✅ created';
+          // Show first 10 lines as preview
+          const preview = lines.slice(0, 10).map((l: string, i: number) => `  ${String(i + 1).padStart(3)} | ${l}`).join('\n');
+          const truncNote = lineCount > 10 ? `\n  ... (${lineCount - 10} more lines)` : '';
+          diffLines.push(`${status}  ${f.path}  (${lineCount} lines)\n${preview}${truncNote}\n`);
+        }
+        diffLines.push(`\nTo write these files, call validate_and_write again without dryRun:true.`);
+        return textResult(diffLines.join('\n'));
       }
 
       // 3. Verification run

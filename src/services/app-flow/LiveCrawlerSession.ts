@@ -57,21 +57,46 @@ export class LiveCrawlerSession {
             timeout: CRAWL_TIMEOUT_MS,
           });
           await page.waitForTimeout(2000);
-          
+
           mutator.ensureNode(currentUrl);
           mutator.incrementVisit(currentUrl);
 
-          // Collect all same-origin href links
-          const hrefs = await page.evaluate((orig: string) => {
-            return Array.from(document.querySelectorAll('a[href]'))
-              .map((a) => ({
-                href: (a as HTMLAnchorElement).href,
-                text: (a as HTMLAnchorElement).innerText.trim().slice(0, 40),
-              }))
-              .filter((item) => item.href.startsWith(orig));
+          // Gap-5: SPA routing — patch history API to capture pushState/replaceState routes
+          // Standard <a href> crawling misses all client-side navigation in React/Angular/Vue apps.
+          const spaRoutes = await page.evaluate((orig: string) => {
+            const routes: { href: string; text: string }[] = [];
+            // (1) Static <a href> links — unchanged baseline
+            Array.from(document.querySelectorAll('a[href]'))
+              .map((a) => ({ href: (a as HTMLAnchorElement).href, text: (a as HTMLAnchorElement).innerText.trim().slice(0, 40) }))
+              .filter((item) => item.href.startsWith(orig))
+              .forEach((item) => routes.push(item));
+            // (2) data-href / data-url attributes — common in React SPAs
+            Array.from(document.querySelectorAll('[data-href],[data-url],[data-route],[data-path]'))
+              .forEach((el) => {
+                const raw = el.getAttribute('data-href') ?? el.getAttribute('data-url') ?? el.getAttribute('data-route') ?? el.getAttribute('data-path') ?? '';
+                if (!raw) return;
+                const href = raw.startsWith('http') ? raw : orig + (raw.startsWith('/') ? '' : '/') + raw;
+                if (href.startsWith(orig)) routes.push({ href, text: (el as HTMLElement).innerText?.trim().slice(0, 40) ?? '' });
+              });
+            // (3) Patch history.pushState / replaceState to record SPA navigations.
+            //     Works even when called from within React Router / Angular Router.
+            (window as any).__spaRoutes__ = routes;
+            const patchHistory = (method: 'pushState' | 'replaceState') => {
+              const orig_ = history[method].bind(history);
+              history[method] = function (state: any, title: string, url?: string | URL | null) {
+                if (url) {
+                  const abs = new URL(String(url), location.origin).href;
+                  (window as any).__spaRoutes__.push({ href: abs, text: '[SPA:' + method + ']' });
+                }
+                return orig_(state, title, url);
+              };
+            };
+            patchHistory('pushState');
+            patchHistory('replaceState');
+            return routes;
           }, origin);
 
-          for (const { href, text } of hrefs) {
+          for (const { href, text } of spaRoutes) {
             const normalized = StaticRouteScanner.normalizeUrl(href);
             if (!visited.has(normalized)) {
               queue.push(normalized);
@@ -82,6 +107,50 @@ export class LiveCrawlerSession {
                 text || normalized,
                 0.9
               );
+            }
+          }
+
+          // Gap-5 cont: click interactive elements and capture URL changes (SPA route discovery)
+          // Cap at 10 elements to avoid crawl explosion. Only click same-page elements (no forms).
+          const clickTargets = await page.evaluate(() =>
+            Array.from(document.querySelectorAll('[data-testid],[aria-label],[role="menuitem"],[role="tab"]'))
+              .filter((el) => {
+                const tag = el.tagName.toLowerCase();
+                return tag !== 'input' && tag !== 'textarea' && tag !== 'select' && !(el as HTMLButtonElement).disabled;
+              })
+              .slice(0, 8)
+              .map((el) => ({
+                selector: el.id ? `#${el.id}` : el.getAttribute('data-testid') ? `[data-testid="${el.getAttribute('data-testid')}"]` : `[aria-label="${el.getAttribute('aria-label')}"]`,
+                label: (el as HTMLElement).innerText?.trim().slice(0, 40) ?? el.getAttribute('aria-label') ?? '',
+              }))
+          );
+          for (const target of clickTargets) {
+            if (!target.selector) continue;
+            const beforeUrl = page.url();
+            try {
+              await page.locator(target.selector).first().click({ timeout: 2000 });
+              await page.waitForTimeout(500);
+              const afterUrl = page.url();
+              if (afterUrl !== beforeUrl && afterUrl.startsWith(origin) && !visited.has(afterUrl)) {
+                const normalized = StaticRouteScanner.normalizeUrl(afterUrl);
+                queue.push(normalized);
+                mutator.addEdge(currentUrl, normalized, target.selector, target.label || normalized, 0.8);
+              }
+            } catch { /* soft fail per element */ }
+            // Navigate back to avoid drift
+            try { await page.goto(currentUrl, { waitUntil: 'domcontentloaded', timeout: CRAWL_TIMEOUT_MS }); await page.waitForTimeout(500); } catch { break; }
+          }
+
+          // Also capture any SPA routes recorded by the history patch during click exploration
+          const patchedRoutes = await page.evaluate((orig: string) => {
+            const routes = (window as any).__spaRoutes__ ?? [];
+            return routes.filter((r: any) => r.href && r.href.startsWith(orig));
+          }, origin).catch(() => [] as { href: string; text: string }[]);
+          for (const { href, text } of patchedRoutes) {
+            const normalized = StaticRouteScanner.normalizeUrl(href);
+            if (!visited.has(normalized)) {
+              queue.push(normalized);
+              mutator.addEdge(currentUrl, normalized, 'history.pushState', text || normalized, 0.85);
             }
           }
 

@@ -5,6 +5,7 @@ import { EnvUtils } from '../env/EnvUtils.js';
 import { NodeEnvChecker } from '../env/NodeEnvChecker.js';
 import { PlaywrightEnvChecker } from '../env/PlaywrightEnvChecker.js';
 import { ConfigEnvChecker } from '../env/ConfigEnvChecker.js';
+import { McpConfigService } from '../config/McpConfigService.js';
 
 export interface EnvironmentReport {
   ready: boolean;
@@ -38,8 +39,9 @@ export class EnvironmentCheckService {
     // 3. Playwright browsers downloaded
     checks.push(await PlaywrightEnvChecker.checkBrowsersDownloaded(projectRoot));
 
-    // 4. playwright.config.ts exists
-    checks.push(ConfigEnvChecker.checkPlaywrightConfig(projectRoot));
+    // 4. playwright.config.ts — respect mcp-config.json playwrightConfig path
+    const mcpCfg = new McpConfigService().read(projectRoot);
+    checks.push(ConfigEnvChecker.checkPlaywrightConfig(projectRoot, mcpCfg.playwrightConfig));
 
     // 5. mcp-config.json exists
     checks.push(ConfigEnvChecker.checkMcpConfig(projectRoot));

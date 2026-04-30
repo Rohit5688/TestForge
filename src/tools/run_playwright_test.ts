@@ -4,6 +4,10 @@ import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult, truncate } from "./_helpers.js";
 import { TestRunnerService } from "../services/execution/TestRunnerService.js";
 import { LastResultStore } from "../services/system/LastResultStore.js";
+import { spawn } from "child_process";
+import * as fs from "fs";
+import * as path from "path";
+import { randomUUID } from "crypto";
 
 /** Extract failed locators from test output for ripple audit + flakiness tracking. */
 function extractFailedLocators(output: string): string[] {
@@ -73,16 +77,54 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         "projectRoot": z.string().describe("Absolute path to the automation project."),
         "tags": z.string().optional().describe("Optional: filter by tag(s), e.g. '@smoke' or '@regression'. Passed as --grep to Playwright."),
         "specificTestArgs": z.string().optional().describe("Optional arguments like a specific feature file path or project flag."),
-        "overrideCommand": z.string().optional().describe("Optional full command to run (e.g. 'npm run test:e2e:smoke'). This bypasses the default executionCommand.")
+        "overrideCommand": z.string().optional().describe("Optional full command to run (e.g. 'npm run test:e2e:smoke'). This bypasses the default executionCommand."),
+        "detached": z.boolean().optional().describe("If true, spawns the test process in the background and returns a runId immediately. Use get_test_run_status(runId) to poll results. Prevents Cline MCP timeout on long-running suites.")
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
     },
     async (args) => {
-      const { projectRoot, tags, specificTestArgs, overrideCommand } = args as any;
+      const { projectRoot, tags, specificTestArgs, overrideCommand, detached } = args as any;
       let argsStr = specificTestArgs || '';
       if (tags) {
         argsStr = `--grep ${tags} ${argsStr}`.trim();
       }
+
+      // Detached mode: spawn process, return runId immediately — avoids Cline MCP timeout
+      if (detached) {
+        const runId = randomUUID().slice(0, 8);
+        const logDir = path.join(projectRoot, '.TestForge', 'runs');
+        fs.mkdirSync(logDir, { recursive: true });
+        const logPath = path.join(logDir, `${runId}.log`);
+        const donePath = path.join(logDir, `${runId}.done`);
+        const pidPath = path.join(logDir, `${runId}.pid`);
+
+        // Build command — same logic as TestRunnerService but as shell string
+        const cmd = overrideCommand || 'npm test';
+        const fullCmd = tags ? `TAGS="${tags}" ${cmd}` : cmd;
+        const logStream = fs.openSync(logPath, 'w');
+
+        const child = spawn('sh', ['-c', fullCmd], {
+          cwd: projectRoot,
+          detached: true,
+          stdio: ['ignore', logStream, logStream],
+        });
+        fs.writeFileSync(pidPath, String(child.pid ?? ''));
+        child.unref();
+
+        // Write .done sentinel when process exits
+        child.on('close', () => {
+          fs.closeSync(logStream);
+          fs.writeFileSync(donePath, String(Date.now()));
+        });
+
+        return textResult(JSON.stringify({
+          runId,
+          logPath,
+          status: 'started',
+          message: `Test run started in background. Poll with get_test_run_status({ runId: "${runId}", projectRoot: "${projectRoot}" })`
+        }, null, 2));
+      }
+
       const result = await runner.runTests(projectRoot, argsStr, undefined, overrideCommand);
 
       // P8: Write result to shared store — self_heal_test auto-reads this
@@ -95,12 +137,36 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         timestamp: Date.now(),
       });
 
-      // Append structured failure block — agent reads this, skips log parsing
+      // Gap-4 fix: Token-efficient output — suppress passing test lines, keep failures + summary.
+      // Passing lines contain "✓" or "  ✔" or "    ✓" — compress them to a count.
       const structured = parseStructuredFailures(result.output);
+      const compressOutput = (raw: string): string => {
+        const lines = raw.split('\n');
+        let passCount = 0;
+        const kept: string[] = [];
+        for (const line of lines) {
+          // Passing test lines: start with spaces + ✓/✔/√ or contain " passed"
+          if (/^\s+[✓✔√]/.test(line) || /^\s+\d+\) /.test(line) === false && /\bpassed\b/.test(line) && /^\s+/.test(line)) {
+            passCount++;
+          } else {
+            kept.push(line);
+          }
+        }
+        if (passCount > 0) {
+          // Insert compact summary at top
+          kept.unshift(`[OUTPUT COMPRESSED] ${passCount} passing lines omitted. Only failures and summary shown.`);
+        }
+        return kept.join('\n');
+      };
+      const compressedOutput = structured.failed === 0
+        ? `[SUMMARY] ${structured.passed} passed, 0 failed ✅`
+        : compressOutput(result.output);
+
+      // Append structured failure block — agent reads this, skips log parsing
       const failureBlock = structured.failed > 0
         ? `\n\n[FAILURES]\n${JSON.stringify(structured, null, 2)}`
         : `\n\n[FAILURES] passed=${structured.passed} failed=0`;
-      return textResult(result.output + failureBlock);
+      return textResult(compressedOutput + failureBlock);
     }
   );
 }

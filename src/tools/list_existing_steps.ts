@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult } from "./_helpers.js";
+import type { McpConfigService } from "../services/config/McpConfigService.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -9,36 +10,43 @@ import * as path from "path";
  * Scans all step definition files and returns a flat inventory of existing step patterns.
  * Used to prevent duplicate step definitions before generation.
  */
-async function scanStepFiles(projectRoot: string): Promise<{ pattern: string; type: string; file: string }[]> {
-  const stepsDir = path.join(projectRoot, "step-definitions");
-  const results: { pattern: string; type: string; file: string }[] = [];
+async function scanStepFiles(projectRoot: string, configuredStepsDir?: string): Promise<{ pattern: string; type: string; file: string }[]> {
+  // Priority: mcp-config.json dirs.steps → common conventions (no hardcoded team paths)
+  const candidates = configuredStepsDir
+    ? [configuredStepsDir]
+    : ['step-definitions', 'steps', 'src/steps', 'e2e/steps', 'test/steps'];
 
-  let files: string[] = [];
+  let resolvedDir: string | null = null;
+  for (const candidate of candidates) {
+    const full = path.isAbsolute(candidate) ? candidate : path.join(projectRoot, candidate);
+    try { await fs.access(full); resolvedDir = full; break; } catch { /* try next */ }
+  }
+
+  const stepsDir = resolvedDir ?? path.join(projectRoot, 'step-definitions');
+  const results: { pattern: string; type: string; file: string }[] = [];
+  await scanRecursive(stepsDir, projectRoot, results);
+  return results;
+}
+
+async function scanRecursive(
+  dir: string,
+  projectRoot: string,
+  results: { pattern: string; type: string; file: string }[]
+): Promise<void> {
+  let entries: import('fs').Dirent[];
   try {
-    files = await fs.readdir(stepsDir);
-  } catch {
-    // Also try "steps" as alternative directory name
-    try {
-      const altDir = path.join(projectRoot, "steps");
-      files = (await fs.readdir(altDir)).map(f => path.join(altDir, f));
-      // Rewrite to use altDir as base
-      for (const f of files) {
-        const content = await fs.readFile(f, "utf8").catch(() => "");
-        extractPatterns(content, path.relative(projectRoot, f), results);
-      }
-      return results;
-    } catch {
-      return results; // No step directory found
+    entries = await fs.readdir(dir, { withFileTypes: true });
+  } catch { return; }
+
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await scanRecursive(full, projectRoot, results);
+    } else if (entry.isFile() && (entry.name.endsWith('.ts') || entry.name.endsWith('.js'))) {
+      const content = await fs.readFile(full, 'utf8').catch(() => '');
+      extractPatterns(content, path.relative(projectRoot, full), results);
     }
   }
-
-  for (const fname of files) {
-    if (!fname.endsWith(".ts") && !fname.endsWith(".js")) continue;
-    const fullPath = path.join(stepsDir, fname);
-    const content = await fs.readFile(fullPath, "utf8").catch(() => "");
-    extractPatterns(content, path.relative(projectRoot, fullPath), results);
-  }
-  return results;
 }
 
 function extractPatterns(
@@ -54,7 +62,8 @@ function extractPatterns(
   }
 }
 
-export function registerListExistingSteps(server: McpServer, _container: ServiceContainer): void {
+export function registerListExistingSteps(server: McpServer, container: ServiceContainer): void {
+  const mcpConfig = container.resolve<McpConfigService>("mcpConfig");
   server.registerTool(
     "list_existing_steps",
     {
@@ -70,11 +79,14 @@ COST: Low (file reads only, no browser, ~100-200 tokens)`,
     },
     async (args) => {
       const { projectRoot } = args as { projectRoot: string };
-      const steps = await scanStepFiles(projectRoot);
+      const config = mcpConfig.read(projectRoot);
+      const configuredStepsDir = config.dirs?.steps || config.dirs?.stepDefinitions;
+      const steps = await scanStepFiles(projectRoot, configuredStepsDir);
 
       if (steps.length === 0) {
         return textResult(
-          `[STEP INVENTORY] No step definitions found in ${projectRoot}/step-definitions/\n` +
+          `[STEP INVENTORY] No step definitions found.\n` +
+          `Searched: ${configuredStepsDir ?? 'step-definitions, steps, src/steps, e2e/steps, test/steps'}\n` +
           `This is a fresh project — generate freely without conflict risk.`
         );
       }

@@ -6,7 +6,23 @@ import type { EnvironmentCheck } from './EnvTypes.js';
 import { EnvUtils } from './EnvUtils.js';
 
 export class ConfigEnvChecker {
-  public static checkPlaywrightConfig(projectRoot: string): EnvironmentCheck {
+  public static checkPlaywrightConfig(projectRoot: string, customConfigPath?: string): EnvironmentCheck {
+    // 1. Check mcp-config.json playwrightConfig field first (custom path)
+    if (customConfigPath) {
+      const full = path.isAbsolute(customConfigPath)
+        ? customConfigPath
+        : path.join(projectRoot, customConfigPath);
+      if (fs.existsSync(full)) {
+        return { name: 'Playwright Config', status: 'pass', message: `Found at ${customConfigPath}` };
+      }
+      return {
+        name: 'Playwright Config',
+        status: 'fail',
+        message: `playwright config not found at configured path: ${customConfigPath}`,
+        fixHint: `Update playwrightConfig in mcp-config.json to the correct relative path.`
+      };
+    }
+    // 2. Default discovery: root-level playwright.config.ts / .js
     const configTs = path.join(projectRoot, 'playwright.config.ts');
     const configJs = path.join(projectRoot, 'playwright.config.js');
     if (fs.existsSync(configTs)) {
@@ -15,12 +31,41 @@ export class ConfigEnvChecker {
     if (fs.existsSync(configJs)) {
       return { name: 'playwright.config.js', status: 'pass', message: 'Found' };
     }
+    // 3. Scan entire project for any playwright.config.ts (warn, not fail)
+    const found = this.findPlaywrightConfig(projectRoot);
+    if (found) {
+      return {
+        name: 'Playwright Config',
+        status: 'warn',
+        message: `playwright.config.ts found at non-standard path: ${found}`,
+        fixHint: `Set playwrightConfig: "${found}" in mcp-config.json so all tools use the correct config.`
+      };
+    }
     return {
       name: 'Playwright Config',
       status: 'fail',
       message: 'playwright.config.ts not found',
       fixHint: 'Run setup_project to generate playwright.config.ts, or create it manually:\n  npx playwright init'
     };
+  }
+
+  private static findPlaywrightConfig(projectRoot: string): string | null {
+    const ignore = new Set(['node_modules', '.git', 'dist', 'build', '.TestForge']);
+    const search = (dir: string, depth: number): string | null => {
+      if (depth > 5) return null;
+      try {
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          if (entry.isDirectory() && !ignore.has(entry.name)) {
+            const found = search(path.join(dir, entry.name), depth + 1);
+            if (found) return found;
+          } else if (entry.isFile() && entry.name === 'playwright.config.ts') {
+            return path.relative(projectRoot, path.join(dir, entry.name));
+          }
+        }
+      } catch { /* ignore permission errors */ }
+      return null;
+    };
+    return search(projectRoot, 0);
   }
 
   public static checkMcpConfig(projectRoot: string): EnvironmentCheck {

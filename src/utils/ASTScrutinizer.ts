@@ -191,9 +191,15 @@ export class ASTScrutinizer {
   public static extractSteps(fileContent: string): string[] {
     const steps: string[] = [];
     const stepRegex = /(?:Given|When|Then|Step)\s*\(\s*['"`](.*?)['"`]/g;
-    let match;
+    let match: RegExpExecArray | null;
     while ((match = stepRegex.exec(fileContent)) !== null) {
-      if (match[1]) steps.push(match[1]);
+      const pattern = match[1];
+      if (!pattern) continue;
+      // Filter out false positives: must be a real BDD step pattern (contains a space or
+      // starts with ^ indicating a regex, and must be longer than 5 chars).
+      // Single/short words like 'No', 'yes', 'ok' are DataTable values, not step patterns.
+      const isRealStep = pattern.length > 5 && (pattern.includes(' ') || pattern.startsWith('^') || pattern.includes('{'));
+      if (isRealStep) steps.push(pattern);
     }
     return steps;
   }

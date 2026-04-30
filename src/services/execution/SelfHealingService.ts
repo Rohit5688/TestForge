@@ -12,7 +12,7 @@
  *   UNKNOWN            - Anything else (network, auth, flaky infra)
  */
 
-export type FailureKind = 'SCRIPTING_FAILURE' | 'SYNCHRONIZATION_FAILURE' | 'APPLICATION_FAILURE' | 'AD_INTERCEPTED_FAILURE' | 'UNKNOWN';
+export type FailureKind = 'SCRIPTING_FAILURE' | 'SYNCHRONIZATION_FAILURE' | 'APPLICATION_FAILURE' | 'AD_INTERCEPTED_FAILURE' | 'INFRASTRUCTURE_FAILURE' | 'STRICT_MODE_VIOLATION' | 'UNKNOWN';
 
 export interface HealingAnalysis {
   kind: FailureKind;
@@ -84,6 +84,31 @@ export class SelfHealingService {
     /toHaveText.*failed/i,
     /toHaveURL.*failed/i,
     /AssertionError/i,
+  ];
+
+  /** Strict mode: selector matched >1 element. Fix: add .first() or more specific qualifier. */
+  private readonly STRICT_MODE_PATTERNS = [
+    /strict mode violation/i,
+    /resolved to \d+ elements/i,
+    /locator.*resolved to.*elements/i,
+  ];
+
+  /** Infrastructure/environment failures: network, browser crash, nav timeout. */
+  private readonly INFRASTRUCTURE_PATTERNS = [
+    /net::ERR_/i,
+    /ERR_CONNECTION_REFUSED/i,
+    /ERR_NAME_NOT_RESOLVED/i,
+    /navigation timeout/i,
+    /Navigation timeout/i,
+    /page\.goto.*timeout/i,
+    /Target closed/i,
+    /Target page.*closed/i,
+    /frame was detached/i,
+    /Frame was detached/i,
+    /context was destroyed/i,
+    /Protocol error/i,
+    /ECONNREFUSED/i,
+    /ETIMEDOUT/i,
   ];
 
   public analyzeFailure(testOutput: string, memoryPrompt: string = '', contextId: string = 'default', projectRoot?: string): HealingAnalysis {
@@ -171,6 +196,14 @@ export class SelfHealingService {
     // Check AD INTERCEPTION first as it's a specific blocker
     for (const pattern of this.AD_INTERCEPTED_PATTERNS) {
       if (pattern.test(output)) return 'AD_INTERCEPTED_FAILURE';
+    }
+    // Strict mode: selector too broad — own kind before SCRIPTING
+    for (const pattern of this.STRICT_MODE_PATTERNS) {
+      if (pattern.test(output)) return 'STRICT_MODE_VIOLATION';
+    }
+    // Infrastructure: network/browser/nav — check before SYNC (timeouts overlap)
+    for (const pattern of this.INFRASTRUCTURE_PATTERNS) {
+      if (pattern.test(output)) return 'INFRASTRUCTURE_FAILURE';
     }
     // Check synchronization FIRST because it can co-occur with toContainText patterns
     for (const pattern of this.SYNC_PATTERNS) {
@@ -320,6 +353,45 @@ STEP 3 - Update the Page Object file with the corrected locator:
 STEP 4 - Re-run the test using run_playwright_test to confirm the fix.
 
 Raw failure output for context:
+${rawError.substring(0, 600)}`;
+    }
+
+    if (kind === 'STRICT_MODE_VIOLATION') {
+      const locatorSection = failedLocators.length > 0
+        ? `Ambiguous Locators (matched >1 element):\n${failedLocators.map(l => `  - ${l}`).join('\n')}`
+        : 'Check the error output for the selector that matched multiple elements.';
+      return `[SELF-HEALING INSTRUCTION: STRICT MODE VIOLATION]
+The locator matched MORE THAN ONE element. Playwright strict mode requires exactly 1 match.
+
+${locatorSection}
+
+Fix options (most to least preferred):
+  1. Make selector more specific — add aria-label, data-testid, or parent context
+  2. Use .first() as a quick fix: locator(...).first()
+  3. Re-inspect live DOM with inspect_page_dom to find a unique attribute
+
+Raw error:
+${rawError.substring(0, 400)}`;
+    }
+
+    if (kind === 'INFRASTRUCTURE_FAILURE') {
+      return `[SELF-HEALING INSTRUCTION: INFRASTRUCTURE / ENVIRONMENT FAILURE]
+The test code is likely CORRECT. The failure is caused by the environment.
+
+Common causes:
+  - net::ERR_* / ECONNREFUSED   → App server is down or URL is wrong
+  - Navigation timeout          → Page took too long to load
+  - Target closed / Frame detached → Browser crashed or page navigated away mid-test
+  - ETIMEDOUT                   → DNS/network issue
+
+Actions:
+  1. Verify app is running at BASE_URL
+  2. Check if the test environment (integration/staging) is healthy
+  3. Retry — may be a transient blip
+  4. For navigation timeout: increase navigationTimeout in playwright.config.ts
+  5. Do NOT modify Page Objects or locators
+
+Raw error:
 ${rawError.substring(0, 600)}`;
     }
 

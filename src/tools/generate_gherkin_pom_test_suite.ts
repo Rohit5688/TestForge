@@ -44,7 +44,7 @@ function buildGenerationPlan(testDescription: string, projectRoot: string, custo
     `[GENERATION PLAN]`,
     `Description  : ${testDescription}`,
     `Project Root : ${projectRoot}`,
-    `Wrapper      : ${customWrapper || 'vasu-playwright-utils (default)'}`,
+    `Wrapper      : ${customWrapper || '(not set — will use mcp-config.customWrapperPackage)'}`,
     ``,
     `Detected Screens (${screens.length}):`,
     ...screens.map(s => `  • ${s}`),
@@ -100,7 +100,9 @@ OUTPUT: Ack (<= 10 words), proceed.`,
 
       // W2: Preview mode — return generation plan without running analysis or prompt build
       if (preview) {
-        return textResult(buildGenerationPlan(testDescription, projectRoot, customWrapperPackage));
+        const cfgForPreview = mcpConfig.read(projectRoot);
+        const wrapperForPreview = customWrapperPackage || cfgForPreview.customWrapperPackage || cfgForPreview.basePageClass;
+        return textResult(buildGenerationPlan(testDescription, projectRoot, wrapperForPreview));
       }
 
       // 1. Ensure project metadata is available
@@ -108,7 +110,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       if (!analysis) {
         await maintenance.ensureUpToDate(projectRoot);
         const config = mcpConfig.read(projectRoot);
-        const resolvedWrapper = customWrapperPackage || config.basePageClass;
+        const resolvedWrapper = customWrapperPackage || config.customWrapperPackage || config.basePageClass;
         try {
           analysis = await analyzer.analyze(projectRoot, resolvedWrapper);
           analysisCache.set(projectRoot, analysis as CodebaseAnalysisResult);
@@ -126,13 +128,16 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       // Fix-2 (hardened for fast models): Hard throw when no verified DOM context exists
       if (!resolvedDomContext && !testContext) {
         throw McpErrors.projectValidationFailed(
-          `[CONTEXT REQUIRED] No verified DOM context found for "${projectRoot}".\n` +
-          `MANDATORY: Call gather_test_context FIRST to capture live selectors and network contracts:\n` +
-          `  → gather_test_context({ baseUrl: "<app_url>", paths: ["<page_path>"] })\n` +
-          `Then call generate_gherkin_pom_test_suite again — context is auto-injected.\n` +
+          `[WARN] No DOM context found in this session for "${projectRoot}".\n` +
+          `Call inspect_page_dom OR gather_test_context FIRST — then call generate_gherkin_pom_test_suite again.\n\n` +
+          `Option A — Single page (preferred for UI tests):\n` +
+          `  → inspect_page_dom({ url: "<page_url>", projectRoot: "${projectRoot}", returnFormat: "json" })\n\n` +
+          `Option B — Multi-page flow (for full journeys):\n` +
+          `  → gather_test_context({ baseUrl: "<app_url>", paths: ["<page_path>", "<page_path2>"] })\n\n` +
+          `Context is auto-injected after either call — no extra params needed.\n` +
           `Skipping this step produces guessed selectors that fail at runtime.`,
           'generate_gherkin_pom_test_suite',
-          { suggestedNextTools: ['gather_test_context', 'inspect_page_dom'] }
+          { suggestedNextTools: ['inspect_page_dom', 'gather_test_context'] }
         );
       }
 
@@ -177,7 +182,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         testDescription,
         projectRoot,
         analysis! as CodebaseAnalysisResult,
-        customWrapperPackage || config.basePageClass,
+        customWrapperPackage || config.customWrapperPackage || config.basePageClass,
         baseUrl || config.envKeys.baseUrl,
         "",
         resolvedDomContext,

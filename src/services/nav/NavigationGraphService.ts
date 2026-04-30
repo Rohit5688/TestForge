@@ -69,6 +69,13 @@ export class NavigationGraphService implements NavGraphMutator {
    * Non-destructive — enriches any existing graph.
    */
   async buildFromStaticAnalysis(forceRebuild = false): Promise<NavGraph> {
+    // Always reload from disk first — covers the case where navigation-map.json
+    // was written externally (e.g. by discover_app_flow or manually) after server start.
+    const fresh = this.load();
+    if (fresh.source !== 'seed' && Object.keys(fresh.nodes).length > 0) {
+      this.graph = fresh;
+    }
+
     if (!forceRebuild && this.graph.source !== 'seed' && Object.keys(this.graph.nodes).length > 0) {
       // Already have real data; skip static re-scan unless forced
       return this.graph;
@@ -77,7 +84,11 @@ export class NavigationGraphService implements NavGraphMutator {
     const urls = StaticRouteScanner.scan(this.projectRoot);
 
     if (urls.size === 0) {
-      // Nothing found → emit a seed graph to guide the LLM
+      // Nothing found — but if we have live/static data on disk, keep it rather than seeding
+      if (this.graph.source !== 'seed' && Object.keys(this.graph.nodes).length > 0) {
+        return this.graph;
+      }
+      // Truly nothing → emit a seed graph to guide the LLM
       this.graph = StaticRouteScanner.buildSeedGraph();
     } else {
       // Add discovered pages as nodes (no edges known statically)

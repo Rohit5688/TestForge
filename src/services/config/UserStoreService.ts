@@ -4,6 +4,7 @@ import { type UserStore, type UserStoreReadResult, type UserStoreWriteResult } f
 import { UserSecurityManager } from '../../utils/UserSecurityManager.js';
 import { UserStorePersistence } from '../../utils/UserStorePersistence.js';
 import { UserHelperGenerator } from '../../utils/UserHelperGenerator.js';
+import { McpConfigService } from './McpConfigService.js';
 
 const SECRET_PLACEHOLDER = '***FILL_IN***';
 
@@ -14,7 +15,14 @@ const SECRET_PLACEHOLDER = '***FILL_IN***';
  * Delegates logic to specialized utility classes.
  */
 export class UserStoreService {
-  private readonly TEST_DATA_DIR = 'test-data';
+  private readonly DEFAULT_TEST_DATA_DIR = 'test-data';
+  private readonly mcpConfig = new McpConfigService();
+
+  /** Resolve testData dir: mcp-config.json dirs.testData → fallback 'test-data' */
+  private resolveTestDataDir(projectRoot: string): string {
+    const cfg = this.mcpConfig.read(projectRoot);
+    return path.join(projectRoot, cfg.dirs?.testData ?? this.DEFAULT_TEST_DATA_DIR);
+  }
   
   private readonly security: UserSecurityManager;
   private readonly persistence: UserStorePersistence;
@@ -28,7 +36,7 @@ export class UserStoreService {
 
   /** Read the user store for a given environment */
   public read(projectRoot: string, environment: string): UserStoreReadResult {
-    const testDataDir = path.join(projectRoot, this.TEST_DATA_DIR);
+    const testDataDir = this.resolveTestDataDir(projectRoot);
     return this.persistence.read(testDataDir, environment);
   }
 
@@ -42,7 +50,7 @@ export class UserStoreService {
     environment: string,
     roles: string[]
   ): UserStoreWriteResult {
-    const testDataDir = path.join(projectRoot, this.TEST_DATA_DIR);
+    const testDataDir = this.resolveTestDataDir(projectRoot);
     if (!fs.existsSync(testDataDir)) {
       fs.mkdirSync(testDataDir, { recursive: true });
     }
@@ -99,7 +107,7 @@ export class UserStoreService {
    * Generates test-data/user-helper.ts into the project.
    */
   public generateUserHelper(projectRoot: string, knownRoles: string[]): void {
-    const testDataDir = path.join(projectRoot, this.TEST_DATA_DIR);
+    const testDataDir = this.resolveTestDataDir(projectRoot);
     if (!fs.existsSync(testDataDir)) {
       fs.mkdirSync(testDataDir, { recursive: true });
     }

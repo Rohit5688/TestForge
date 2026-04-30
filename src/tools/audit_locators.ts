@@ -30,7 +30,18 @@ OUTPUT: Ack (<= 10 words), proceed.`,
     },
     async (args) => {
       const { projectRoot, pagesRoot } = args as any;
-      const report = await locatorAudit.audit(projectRoot, pagesRoot || 'pages');
+      // Resolve pages dir: explicit arg → mcp-config.json dirs.pages → fallback 'pages'
+      let resolvedPagesRoot = pagesRoot;
+      if (!resolvedPagesRoot) {
+        try {
+          const { McpConfigService } = await import('../services/config/McpConfigService.js');
+          const cfg = new McpConfigService().read(projectRoot);
+          resolvedPagesRoot = cfg.dirs?.pages ?? 'pages';
+        } catch {
+          resolvedPagesRoot = 'pages';
+        }
+      }
+      const report = await locatorAudit.audit(projectRoot, resolvedPagesRoot);
       return textResult(report.markdownReport);
     }
   );

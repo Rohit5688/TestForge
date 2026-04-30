@@ -1,9 +1,10 @@
 export interface ActionStep {
-    action: 'click' | 'fill' | 'wait' | 'goto';
+    action: 'click' | 'fill' | 'wait' | 'goto' | 'clickText' | 'hover' | 'select' | 'press' | 'clearAndFill' | 'waitForSelector' | 'evaluate' | 'waitForResponse' | 'switchToFrame' | 'switchToMainFrame' | 'uploadFile' | 'switchToNewTab' | 'switchToTab' | 'closeTab';
     selector?: string;
     value?: string;
     timeout?: number;
     url?: string;
+    frameSelector?: string;
 }
 export interface IDomInspector {
     /**

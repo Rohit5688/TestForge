@@ -28,6 +28,7 @@ import { registerGenerateTestDataFactory } from "./generate_test_data_factory.js
 // Execution & Maintenance Tools
 import { registerValidateAndWrite } from "./validate_and_write.js";
 import { registerRunPlaywrightTest } from "./run_playwright_test.js";
+import { registerGetTestRunStatus } from "./get_test_run_status.js";
 import { registerUpdateVisualBaselines } from "./update_visual_baselines.js";
 import { registerSummarizeSuite } from "./summarize_suite.js";
 
@@ -91,6 +92,7 @@ export function registerAllTools(server: McpServer, container: ServiceContainer)
   // Execution
   registerValidateAndWrite(server, container);
   registerRunPlaywrightTest(server, container);
+  registerGetTestRunStatus(server, container);
   registerUpdateVisualBaselines(server, container);
   registerSummarizeSuite(server, container);
 

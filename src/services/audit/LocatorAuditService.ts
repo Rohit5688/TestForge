@@ -58,6 +58,17 @@ export class LocatorAuditService {
       const isMatched = (idx: number) => matchedRanges.some(r => idx >= r.start && idx <= r.end);
       const addMatch = (idx: number, length: number) => matchedRanges.push({start: idx, end: idx + length});
 
+      // Pattern 6: Custom wrapper standalone calls — getLocator('selector'), getLocatorByRole('role'), etc.
+      // Covers @ecs-na/trifecta-framework and similar custom wrapper packages.
+      const wrapperLocatorPattern = /\bgetLocator(?:ByRole|ByTestId|ByLabel|ByPlaceholder|ByText)?\(\s*['"`](.+?)['"`]/g;
+      for (const match of content.matchAll(wrapperLocatorPattern)) {
+        if (isMatched(match.index ?? 0)) continue;
+        addMatch(match.index ?? 0, match[0].length);
+        const selector = match[1] ?? '';
+        const fnName = match[0].split('(')[0]?.trim() ?? 'getLocator';
+        entries.push(this.classifyEntry(relPath, resolveClass(match.index ?? 0), `${fnName}()`, selector));
+      }
+
       // Pattern 5 (BUG-07 FIX): Class-property stored locators.
       // Previously invisible: private loginBtn = this.page.locator('#btn')
       // These are the most common POM pattern and were entirely missed.

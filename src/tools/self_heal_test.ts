@@ -5,6 +5,8 @@ import { textResult, truncate } from "./_helpers.js";
 import type { SelfHealingService } from "../services/execution/SelfHealingService.js";
 import { LastResultStore } from "../services/system/LastResultStore.js";
 import { FlakinessTracker } from "../services/system/FlakinessTracker.js";
+import type { DomInspectorService } from "../services/dom/DomInspectorService.js";
+import type { PlaywrightSessionService } from "../services/execution/PlaywrightSessionService.js";
 import * as fs from "fs/promises";
 import * as path from "path";
 
@@ -46,6 +48,8 @@ async function findSelectorRipple(
 
 export function registerSelfHealTest(server: McpServer, container: ServiceContainer) {
   const healer = container.resolve<SelfHealingService>("healer");
+  const domInspector = container.resolve<DomInspectorService>("domInspector");
+  const sessionService = container.resolve<PlaywrightSessionService>("session");
 
   server.registerTool(
     "self_heal_test",
@@ -92,8 +96,26 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         }
       }
 
+      // Gap-7: auto re-inspect live DOM when pageUrl provided
+      // Gap-P2: if no active session, auto-start one via navigateTo (which calls startSession internally)
+      let freshDomContext = '';
+      if (pageUrl && pageUrl !== 'unknown') {
+        try {
+          let activePage = sessionService.getPage();
+          if (!activePage) {
+            // Auto-start session + navigate — navigateTo() calls startSession() if page is null
+            await sessionService.navigate(pageUrl);
+            activePage = sessionService.getPage();
+          }
+          freshDomContext = await domInspector.inspect(
+            pageUrl, undefined, undefined, undefined, undefined,
+            15000, false, 'yaml', projectRoot ?? undefined, undefined, activePage ?? undefined
+          );
+        } catch { /* soft fail — heal continues without fresh DOM */ }
+      }
+
       const rawError = resolvedErrorDna?.originalError || JSON.stringify(resolvedErrorDna || {});
-      const result = healer.analyzeFailure(rawError, '', 'default', projectRoot);
+      const result = healer.analyzeFailure(rawError, freshDomContext || '', 'default', projectRoot);
 
       // P6: Record selector failures to FlakinessTracker
       if (projectRoot && result.failedLocators?.length > 0) {
@@ -114,6 +136,9 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       const autoNote = autoInjected
         ? `\n[AUTO-INJECT] errorDna loaded from last run_playwright_test result — no manual copy needed.\n`
         : '';
+      const domNote = freshDomContext
+        ? `\n[AUTO-DOM] Live DOM re-inspected from ${pageUrl} — fresh selectors included in analysis.\n`
+        : '';
 
       // Fix-1: Hard stop signal when max attempts exhausted
       if (result.healInstruction?.startsWith('MAX_HEAL_ATTEMPTS_REACHED')) {
@@ -126,7 +151,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         );
       }
 
-      return textResult(autoNote + JSON.stringify(result, null, 2) + rippleBlock);
+      return textResult(autoNote + domNote + JSON.stringify(result, null, 2) + rippleBlock);
     }
   );
 }
