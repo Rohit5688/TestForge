@@ -1,6 +1,6 @@
 import { chromium } from 'playwright';
 import type { Browser } from 'playwright';
-import type { IDomInspector, LoginMacro } from '../../interfaces/IDomInspector.js';
+import type { IDomInspector, ActionStep } from '../../interfaces/IDomInspector.js';
 import { ScreenshotStorage } from '../../utils/ScreenshotStorage.js';
 import { SmartDomExtractor } from '../../utils/SmartDomExtractor.js';
 
@@ -15,7 +15,7 @@ export class DomInspectorService implements IDomInspector {
    *                      'json' — flat JsonElement[] array (locator + selectorArgs) for
    *                               custom-wrapper-aware POM generators.
    */
-  public async inspect(url: string, waitForSelector?: string, storageState?: string, includeIframes?: boolean, loginMacro?: LoginMacro, timeoutMs: number = 30000, enableVisualMode: boolean = false, returnFormat: DomReturnFormat = 'markdown', projectRoot?: string): Promise<string> {
+  public async inspect(url: string, waitForSelector?: string, storageState?: string, includeIframes?: boolean, actionSequence?: ActionStep[], timeoutMs: number = 30000, enableVisualMode: boolean = false, returnFormat: DomReturnFormat = 'markdown', projectRoot?: string): Promise<string> {
     let browser: Browser | null = null;
     try {
       // B1 FIX: Playwright internally tries to set Error.stackTraceLimit which is
@@ -34,18 +34,30 @@ export class DomInspectorService implements IDomInspector {
       const context = await browser.newContext(contextArgs);
       const page = await context.newPage();
 
-      // Dynamic Macro Login sequence
-      if (loginMacro) {
-        await page.goto(loginMacro.loginUrl, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
-        await page.fill(loginMacro.userSelector, loginMacro.usernameValue);
-        await page.fill(loginMacro.passSelector, loginMacro.passwordValue);
-        await page.click(loginMacro.submitSelector);
-        await page.waitForLoadState('networkidle').catch(() => { });
+      // Maestro-inspired Action Sequence Execution
+      if (actionSequence && actionSequence.length > 0) {
+        for (const step of actionSequence) {
+          switch (step.action) {
+            case 'goto':
+              if (step.url) await page.goto(step.url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
+              break;
+            case 'fill':
+              if (step.selector && step.value !== undefined) await page.fill(step.selector, step.value);
+              break;
+            case 'click':
+              if (step.selector) await page.click(step.selector);
+              break;
+            case 'wait':
+              await page.waitForTimeout(step.timeout || 2000);
+              break;
+          }
+        }
+        await page.waitForTimeout(2000); // final buffer
       }
 
       // Navigate to ultimate destination
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs });
-      await page.waitForLoadState('networkidle').catch(() => { });
+      await page.waitForTimeout(10000);
 
       if (waitForSelector) {
         await page.waitForSelector(waitForSelector, { timeout: 5000 }).catch(() => { });

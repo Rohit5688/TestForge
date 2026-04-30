@@ -65,7 +65,12 @@ export class LearningService {
       return initialKnowledge;
     }
     try {
-      return JSON.parse(fs.readFileSync(storagePath, 'utf8'));
+      const parsed = JSON.parse(fs.readFileSync(storagePath, 'utf8'));
+      // Protect against malformed JSON missing the rules array
+      if (!parsed.rules || !Array.isArray(parsed.rules)) {
+        parsed.rules = [];
+      }
+      return parsed;
     } catch {
       return { version: '1.0.0', rules: [] };
     }

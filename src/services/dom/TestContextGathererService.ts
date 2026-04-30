@@ -2,13 +2,12 @@ import { chromium } from 'playwright';
 import type { Browser, Page } from 'playwright';
 import type { TestContext, PageContext, PageElement, NetworkCall } from '../../types/TestContext.js';
 
-export interface LoginMacro {
-  loginPath: string;
-  userSelector: string;
-  usernameValue: string;
-  passSelector: string;
-  passwordValue: string;
-  submitSelector: string;
+export interface ActionStep {
+  action: 'click' | 'fill' | 'wait' | 'goto';
+  selector?: string;
+  value?: string;
+  timeout?: number;
+  url?: string;
 }
 
 export interface GatherOptions {
@@ -16,8 +15,8 @@ export interface GatherOptions {
   /** Relative paths to visit, e.g. ['/login', '/dashboard']. May include full URLs. */
   paths: string[];
   storageState?: string;
-  /** Perform a login before visiting protected paths */
-  loginMacro?: LoginMacro;
+  /** Perform actions before visiting protected paths */
+  actionSequence?: ActionStep[];
 }
 
 // XHR/fetch calls to these host fragments are noise, never useful for waitForResponse()
@@ -43,7 +42,7 @@ export class TestContextGathererService {
    * The browser is guaranteed to close via the finally block.
    */
   public async gather(options: GatherOptions): Promise<TestContext> {
-    const { baseUrl, paths, storageState, loginMacro } = options;
+    const { baseUrl, paths, storageState, actionSequence } = options;
     let browser: Browser | undefined;
 
     try {
@@ -58,17 +57,31 @@ export class TestContextGathererService {
       };
       const ctx = await browser.newContext(contextOptions);
 
-      // Execute login macro on a fresh page before visiting protected routes
-      if (loginMacro) {
+      // Execute action sequence on a fresh page before visiting protected routes
+      if (actionSequence && actionSequence.length > 0) {
         const loginPage = await ctx.newPage();
         try {
-          await loginPage.goto(this.resolveUrl(baseUrl, loginMacro.loginPath), { waitUntil: 'domcontentloaded', timeout: 30_000 });
-          await loginPage.locator(loginMacro.userSelector).fill(loginMacro.usernameValue);
-          await loginPage.locator(loginMacro.passSelector).fill(loginMacro.passwordValue);
-          await Promise.all([
-            loginPage.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {}),
-            loginPage.locator(loginMacro.submitSelector).click()
-          ]);
+          for (const step of actionSequence) {
+            switch (step.action) {
+              case 'goto':
+                if (step.url) {
+                  const url = step.url.startsWith('http') ? step.url : this.resolveUrl(baseUrl, step.url);
+                  await loginPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+                }
+                break;
+              case 'fill':
+                if (step.selector && step.value !== undefined) await loginPage.locator(step.selector).fill(step.value);
+                break;
+              case 'click':
+                if (step.selector) await loginPage.locator(step.selector).click();
+                break;
+              case 'wait':
+                await loginPage.waitForTimeout(step.timeout || 2000);
+                break;
+            }
+          }
+          // Wait gracefully for auth handshakes and redirect chains to settle using a hard timeout, avoiding networkidle
+          await loginPage.waitForTimeout(10000);
         } finally {
           await loginPage.close().catch(() => {});
         }
@@ -128,6 +141,9 @@ export class TestContextGathererService {
       });
 
       await page.goto(requestedUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+      
+      // Wait gracefully for JS frameworks to finish rendering and intermediate redirects to resolve
+      await page.waitForTimeout(10000);
 
       const resolvedUrl = page.url();
       const title = await page.title();

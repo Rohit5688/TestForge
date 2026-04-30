@@ -82,19 +82,18 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         "returnFormat": z.enum(["markdown", "json"]).optional().describe("Output format. 'markdown' (default) returns Actionable Markdown for LLM prompts. 'json' returns flat JsonElement[] with selectorArgs — use this for custom-wrapper-aware POM generation."),
         "includeIframes": z.boolean().optional().describe("Set to true to also scrape accessibility trees inside nested iframes."),
         "storageState": z.string().optional().describe("Optional absolute path to a Playwright storageState JSON file to bypass login."),
-        "loginMacro": z.object({
-          "loginUrl": z.string(),
-          "userSelector": z.string(),
-          "usernameValue": z.string(),
-          "passSelector": z.string(),
-          "passwordValue": z.string(),
-          "submitSelector": z.string()
-        }).optional().describe("Optional macro to execute a login sequence BEFORE visiting the target URL. The AI can infer selectors for the login page and pass credentials here.")
+        "actionSequence": z.array(z.object({
+          "action": z.enum(["click", "fill", "wait", "goto"]),
+          "selector": z.string().optional(),
+          "value": z.string().optional(),
+          "timeout": z.number().optional(),
+          "url": z.string().optional()
+        })).optional().describe("Optional sequence of actions to execute before parsing the DOM. Ideal for SSO logins or navigating multi-step modals.")
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }
     },
     async (args) => {
-      const { url, projectRoot, waitForSelector, returnFormat, includeIframes, storageState, loginMacro } = args as any;
+      const { url, projectRoot, waitForSelector, returnFormat, includeIframes, storageState, actionSequence } = args as any;
       validateUrl(url);
       const format = returnFormat || 'markdown';
       const result = await domInspector.inspect(
@@ -102,7 +101,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         waitForSelector,
         storageState,
         includeIframes,
-        loginMacro,
+        actionSequence,
         30000, // timeoutMs
         false, // enableVisualMode
         format as any,

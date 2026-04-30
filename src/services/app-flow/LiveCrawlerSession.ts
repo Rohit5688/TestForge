@@ -56,7 +56,7 @@ export class LiveCrawlerSession {
             waitUntil: 'domcontentloaded',
             timeout: CRAWL_TIMEOUT_MS,
           });
-          await page.waitForLoadState('networkidle').catch(() => {});
+          await page.waitForTimeout(2000);
           
           mutator.ensureNode(currentUrl);
           mutator.incrementVisit(currentUrl);

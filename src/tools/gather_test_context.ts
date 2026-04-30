@@ -82,24 +82,23 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         "baseUrl": z.string().describe("Base URL of the application, e.g. https://app.example.com"),
         "paths": z.array(z.string()).describe("Relative paths to visit in order, e.g. [\"/login\", \"/dashboard\"]. May also be full URLs."),
         "storageState": z.string().optional().describe("Path to Playwright storageState JSON for pre-authenticated crawls."),
-        "loginMacro": z.object({
-          "loginPath": z.string(),
-          "userSelector": z.string(),
-          "usernameValue": z.string(),
-          "passSelector": z.string(),
-          "passwordValue": z.string(),
-          "submitSelector": z.string()
-        }).optional().describe("Optional: perform a login before visiting protected paths.")
+        "actionSequence": z.array(z.object({
+          "action": z.enum(["click", "fill", "wait", "goto"]),
+          "selector": z.string().optional(),
+          "value": z.string().optional(),
+          "timeout": z.number().optional(),
+          "url": z.string().optional()
+        })).optional().describe("Optional sequence of actions to execute before parsing the DOM. Ideal for SSO logins or navigating multi-step modals.")
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: true }
     },
     async (args) => {
-      const { baseUrl, paths, storageState, loginMacro } = args as any;
+      const { baseUrl, paths, storageState, actionSequence } = args as any;
       const context = await gatherer.gather({
         baseUrl,
         paths,
         storageState,
-        loginMacro
+        actionSequence
       });
 
       // P3: Append network contract block to raw JSON output

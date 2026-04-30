@@ -1,10 +1,9 @@
-export interface LoginMacro {
-    loginUrl: string;
-    userSelector: string;
-    usernameValue: string;
-    passSelector: string;
-    passwordValue: string;
-    submitSelector: string;
+export interface ActionStep {
+    action: 'click' | 'fill' | 'wait' | 'goto';
+    selector?: string;
+    value?: string;
+    timeout?: number;
+    url?: string;
 }
 export interface IDomInspector {
     /**
@@ -12,6 +11,6 @@ export interface IDomInspector {
      * Accessibility Tree (AOM) or cleaned DOM representation.
      * This provides the LLM with exact, real locators (roles, names, aria properties).
      */
-    inspect(url: string, waitForSelector?: string, storageState?: string, includeIframes?: boolean, loginMacro?: LoginMacro): Promise<string>;
+    inspect(url: string, waitForSelector?: string, storageState?: string, includeIframes?: boolean, actionSequence?: ActionStep[]): Promise<string>;
 }
 //# sourceMappingURL=IDomInspector.d.ts.map
