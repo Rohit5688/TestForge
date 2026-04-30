@@ -103,6 +103,11 @@ export class NavigationGraphService implements NavGraphMutator {
     storageState?: string,
     maxPages: number = 25,
   ): Promise<NavGraph> {
+    // Wipe dummy seed data before replacing it with live crawl data
+    if (this.graph.source === 'seed') {
+      this.graph.nodes = {};
+    }
+
     this.graph.entryUrl = startUrl;
     
     await LiveCrawlerSession.crawl(startUrl, this, storageState, maxPages);
