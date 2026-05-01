@@ -1,4 +1,5 @@
-import { chromium } from 'playwright';
+// chromium is imported lazily inside startSession() to ensure the
+// Error.stackTraceLimit patch in index.ts runs first (ESM hoist issue on Windows/Node 20+).
 import type { Browser, BrowserContext, Page, Locator } from 'playwright';
 import { withRetry, RetryPolicies } from '../../utils/RetryEngine.js';
 
@@ -27,10 +28,14 @@ export class PlaywrightSessionService {
     }
 
     try {
+      // Lazy import — ensures Error.stackTraceLimit patch in index.ts fires before playwright loads.
+      // Top-level ESM import would be hoisted past the patch, causing read-only property error on Windows/Node 20+.
+      const { chromium } = await import('playwright');
+
       // TF-NEW-02: Retry browser launch — transient in CI (missing binary, stale lock, etc.)
       const launchResult = await withRetry(
         () => chromium.launch({
-          headless: options.headless !== false, // default to headless unless explicitly false
+          headless: options.headless !== false,
           args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']
         }),
         RetryPolicies.playwrightBrowser
