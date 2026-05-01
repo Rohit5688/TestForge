@@ -27,6 +27,19 @@ export class DomInspectorService implements IDomInspector {
       if (activePage) {
         page = activePage;
         context = page.context();
+        // If session is on a different URL, navigate to the requested one first.
+        // Without this, the snapshot captures whatever the session happens to have open.
+        const currentUrl = page.url();
+        const targetOrigin = (() => { try { return new URL(url).origin; } catch { return null; } })();
+        const currentOrigin = (() => { try { return new URL(currentUrl).origin; } catch { return null; } })();
+        const sameOrigin = targetOrigin && targetOrigin === currentOrigin;
+        if (currentUrl !== url && !(currentUrl.startsWith(url) || url.startsWith(currentUrl))) {
+          // Only navigate if substantially different URL (not just trailing slash / query string variance)
+          await page.goto(url, { waitUntil: 'domcontentloaded', timeout: timeoutMs }).catch(() => {});
+          if (sameOrigin) {
+            await page.waitForLoadState('networkidle', { timeout: 8000 }).catch(() => {});
+          }
+        }
       } else {
         // Gap-6: headed mode when enableVisualExploration=true in mcp-config.json
         let headless = true;
@@ -547,6 +560,7 @@ export class DomInspectorService implements IDomInspector {
                 '[role="button"]', '[role="textbox"]', '[role="combobox"]',
                 '[data-testid]', '[data-qa]', '[aria-label]'
               ];
+              const seen = new Set<string>();
               return selectors.flatMap(sel => {
                 return Array.from(document.querySelectorAll(sel)).map((el: Element) => ({
                   tag: el.tagName.toLowerCase(),
@@ -558,10 +572,14 @@ export class DomInspectorService implements IDomInspector {
                   text: (el.textContent ?? '').trim().slice(0, 60) || undefined,
                   placeholder: (el as HTMLInputElement).placeholder ?? undefined
                 }));
-              }).filter((e, i, arr) =>
-                // dedupe by tag+name+ariaLabel
-                arr.findIndex(x => x.tag === e.tag && x.name === e.name && x.ariaLabel === e.ariaLabel) === i
-              ).slice(0, 50); // cap at 50 elements to avoid token bloat
+              }).filter(e => {
+                // Composite dedup key — prevents false-dedup of elements sharing tag+name
+                // but differing in testId/ariaLabel/placeholder (e.g. two different inputs).
+                const key = `${e.tag}|${e.testId ?? ''}|${e.ariaLabel ?? ''}|${e.name ?? ''}|${e.placeholder ?? ''}|${e.text?.slice(0, 20) ?? ''}`;
+                if (seen.has(key)) return false;
+                seen.add(key);
+                return true;
+              }).slice(0, 80); // cap at 80 — covers complex iframes without token bloat
             });
             result.iframes.push({ url: frameUrl, snapshot: elements });
           } catch (e: any) {

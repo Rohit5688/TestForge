@@ -156,16 +156,39 @@ OUTPUT: Read returned JSON, proceed to generate or edit.`,
               return content;
             })(featuresDirAbs);
 
+            // Collect URL paths explicitly navigated to in feature files.
+            // Matches patterns like:
+            //   Given I navigate to "/products/shoes"
+            //   Given I am on "/dashboard"
+            //   And the user visits "/checkout"
+            // Also collects any quoted path-like strings (starts with /) as a fallback.
+            const navigatedPaths = new Set<string>();
+            const navPatterns = [
+              // Gherkin step patterns with URL arguments
+              /(?:navigate to|am on|visit|open|go to|load|url is)\s+["']([^"']+)["']/gi,
+              // Feature file URL references — quoted strings starting with /
+              /"(\/[^"]{2,})"/g,
+              /'(\/[^']{2,})'/g,
+            ];
+            for (const rx of navPatterns) {
+              let m;
+              const src = new RegExp(rx.source, rx.flags); // reset lastIndex
+              while ((m = src.exec(featureContent)) !== null) {
+                navigatedPaths.add(m[1]!.split('?')[0]!); // strip query strings
+              }
+            }
+
             const uncovered = knownScreens.filter(screen => {
-              // Extract URL path from "ScreenName — /path/to/page"
-              const urlPart = screen.split(' — ')[1] ?? '';
-              if (!urlPart || urlPart.startsWith('http')) return false;
-              // Use the last path segment (most specific) for coverage check
-              const segments = urlPart.split('/').filter(s => s.length > 3);
-              if (segments.length === 0) return false;
-              // Must match the LAST meaningful segment specifically
-              const lastSeg = segments[segments.length - 1]!;
-              return !featureContent.includes(lastSeg);
+              const urlPart = (screen.split(' — ')[1] ?? '').trim();
+              if (!urlPart || urlPart === '/' || urlPart.startsWith('http')) return false;
+              const cleanUrl = urlPart.split('?')[0]!; // strip query strings
+
+              // Exact or prefix match against collected navigation paths
+              return ![...navigatedPaths].some(p =>
+                p === cleanUrl ||
+                cleanUrl.startsWith(p + '/') ||
+                p.startsWith(cleanUrl + '/')
+              );
             });
 
             if (uncovered.length > 0) {

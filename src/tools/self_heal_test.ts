@@ -99,6 +99,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       // Gap-7: auto re-inspect live DOM when pageUrl provided
       // Gap-P2: if no active session, auto-start one via navigateTo (which calls startSession internally)
       let freshDomContext = '';
+      let domReinspectError = '';
       if (pageUrl && pageUrl !== 'unknown') {
         try {
           let activePage = sessionService.getPage();
@@ -107,11 +108,18 @@ OUTPUT: Ack (<= 10 words), proceed.`,
             await sessionService.navigate(pageUrl);
             activePage = sessionService.getPage();
           }
-          freshDomContext = await domInspector.inspect(
-            pageUrl, undefined, undefined, undefined, undefined,
-            15000, false, 'yaml', projectRoot ?? undefined, undefined, activePage ?? undefined
-          );
-        } catch { /* soft fail — heal continues without fresh DOM */ }
+          if (activePage) {
+            freshDomContext = await domInspector.inspect(
+              pageUrl, undefined, undefined, undefined, undefined,
+              15000, false, 'yaml', projectRoot ?? undefined, undefined, activePage
+            );
+          } else {
+            domReinspectError = 'Session navigation completed but getPage() still returned null.';
+          }
+        } catch (e) {
+          // Surface the real reason — not a silent black hole
+          domReinspectError = e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120);
+        }
       }
 
       const rawError = resolvedErrorDna?.originalError || JSON.stringify(resolvedErrorDna || {});
@@ -138,7 +146,9 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         : '';
       const domNote = freshDomContext
         ? `\n[AUTO-DOM] Live DOM re-inspected from ${pageUrl} — fresh selectors included in analysis.\n`
-        : '';
+        : domReinspectError
+          ? `\n[AUTO-DOM FAILED] Could not re-inspect DOM at ${pageUrl}: ${domReinspectError}\nHeal continues with error context only — selectors may be stale.\n`
+          : '';
 
       // Fix-1: Hard stop signal when max attempts exhausted
       if (result.healInstruction?.startsWith('MAX_HEAL_ATTEMPTS_REACHED')) {
