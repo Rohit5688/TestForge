@@ -41,16 +41,38 @@ export class StagingService {
       const stagedPaths = new Set(files.map(f => f.path));
       StagingService.mirrorProjectTs(projectRoot, projectRoot, stagingDir, stagedPaths);
 
-      // 1c. Symlink project node_modules and config files so resolution works.
-      const symlinkFiles = ['node_modules', 'package.json', 'playwright.config.ts'];
-      for (const file of symlinkFiles) {
-        const projectFile = path.join(projectRoot, file);
-        const stagingFile = path.join(stagingDir, file);
-        if (fs.existsSync(projectFile) && !fs.existsSync(stagingFile)) {
-          const isDir = fs.statSync(projectFile).isDirectory();
-          fs.symlinkSync(projectFile, stagingFile, isDir ? 'junction' : 'file');
+      // 1c. Link project node_modules and config files so tsc type resolution works.
+      // Windows EPERM fix: symlinkSync to os.tmpdir() fails without Developer Mode or elevated perms.
+      // Strategy:
+      //   - Small config files (package.json, playwright.config.ts): always copy — they are tiny.
+      //   - node_modules: use junction only when source and staging are on the same drive letter
+      //     (same-drive junctions never require elevated perms on Windows); skip otherwise
+      //     (tsc still resolves types via the project tsconfig 'extends' path above).
+      const smallConfigFiles = ['package.json', 'playwright.config.ts'];
+      for (const file of smallConfigFiles) {
+        const src = path.join(projectRoot, file);
+        const dest = path.join(stagingDir, file);
+        if (fs.existsSync(src) && !fs.existsSync(dest)) {
+          try { fs.copyFileSync(src, dest); } catch { /* non-fatal */ }
         }
       }
+
+      // node_modules: junction when same drive, skip otherwise
+      const nmSrc = path.join(projectRoot, 'node_modules');
+      const nmDest = path.join(stagingDir, 'node_modules');
+      if (fs.existsSync(nmSrc) && !fs.existsSync(nmDest)) {
+        const sameDrive = process.platform !== 'win32' ||
+          path.parse(nmSrc).root.toLowerCase() === path.parse(nmDest).root.toLowerCase();
+        if (sameDrive) {
+          try {
+            fs.symlinkSync(nmSrc, nmDest, 'junction');
+          } catch {
+            // junction failed (e.g. antivirus, restricted tmpdir) — skip; tsc resolves via extends
+          }
+        }
+        // Cross-drive or failed: tsc resolves node_modules via the project tsconfig 'extends' chain
+      }
+
 
       // 2. Validate TypeScript if there are .ts files
       const tsFiles = files.filter(f => f.path.endsWith('.ts'));
