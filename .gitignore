@@ -16,6 +16,7 @@ website/.astro/
 test-results/
 playwright-report/
 blob-report/
+allure-results/
 mcp-logs/
 *.log
 npm-debug.log*
@@ -29,15 +30,15 @@ yarn-error.log*
 .pkg-cache/
 graphify-out/
 scratch/
+backups/
+detect.json
+.graphify_detect.json
 test-fixes.cjs
 incoming_files.txt
 local_files.txt
 
 # IDE & System settings
-.vscode/*
-!.vscode/extensions.json
-!.vscode/launch.json
-!.vscode/settings.json
+.vscode/
 .idea/
 .DS_Store
 Thumbs.db
@@ -46,6 +47,10 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+*.sublime-project
+*.sublime-workspace
+.claude/
+.cursor/
 
 # Environment & Secrets
 .env
@@ -61,4 +66,3 @@ __pycache__/
 .venv/
 venv/
 ENV/
-
