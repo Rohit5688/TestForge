@@ -1,0 +1,10 @@
+{
+    "version": "1.0",
+    "scopes": [
+        {
+            "path": "e2e",
+            "platform": "web",
+            "server": "testforge"
+        }
+    ]
+}

@@ -1,0 +1,11 @@
+{
+    "forge-runner.ai.activeModel": "gpt-4o",
+    "forge-runner.ai.activePlatform": "web",
+    "forge-runner.playwright.configPath": "playwright.config.ts",
+    "forge-runner.playwright.featureFolder": "features",
+    "forge-runner.playwright.stepsFolder": "step-definitions",
+    "forge-runner.playwright.projectRoot": ".",
+    "forge-runner.playwright.enableFeatureGen": true,
+    "forge-runner.playwright.stepsFilePattern": "step-definitions/**/*.{js,ts,mjs,mts}",
+    "forge-runner.playwright.tsconfigPath": "tsconfig.json",
+}
