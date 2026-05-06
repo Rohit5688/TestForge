@@ -60,9 +60,13 @@ OUTPUT: Read returned JSON, proceed to generate or edit.`,
             .find(d => fs.existsSync(path.join(projectRoot, d)))
           ?? 'pages');
 
-      // Detect wrapper — prefer customWrapperPackage from mcp-config over legacy basePageClass
+      // Detect wrapper — read from mcp-config.json first, fallback to default
+      // Priority: customWrapper.package > customWrapperPackage > basePageClass > vasu-playwright-utils (default)
       let wrapperMethods: string[] = [];
-      const wrapperPkg = config.customWrapperPackage || config.basePageClass || 'vasu-playwright-utils';
+      const wrapperPkg = (config as any).customWrapper?.package 
+        || config.customWrapperPackage 
+        || config.basePageClass 
+        || 'vasu-playwright-utils';
       try {
         const pkgPath = path.join(projectRoot, 'node_modules', wrapperPkg, 'package.json');
         const pkgJson = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));

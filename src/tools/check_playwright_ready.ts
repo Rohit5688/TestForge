@@ -25,7 +25,12 @@ export function registerCheckPlaywrightReady(server: McpServer, container: Servi
       const formatted = preFlight.formatReport(report);
 
       if (!report.allPassed) {
-        throw McpErrors.projectValidationFailed(formatted, "check_playwright_ready");
+        // Add context: is this failure expected or critical?
+        const contextMsg = baseUrl 
+          ? `\n\n💡 Note: baseUrl "${baseUrl}" is unreachable. This is normal if:\n  • Application is not running locally\n  • Testing against a remote environment\n  • Using mock/stub data\n\nIf this is expected, proceed. Otherwise, start the application first.`
+          : `\n\n💡 Some checks failed. Review details above and fix before proceeding.`;
+        
+        throw McpErrors.projectValidationFailed(formatted + contextMsg, "check_playwright_ready");
       }
       return { content: [{ type: "text", text: formatted }] };
     }

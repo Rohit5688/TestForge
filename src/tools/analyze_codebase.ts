@@ -11,13 +11,18 @@ export function registerAnalyzeCodebase(server: McpServer, container: ServiceCon
   server.registerTool(
     "analyze_codebase",
     {
-      description: `TRIGGER: Scan existing codebase structure before generating code. FOR TINY PROJECTS (<5 files) ONLY.
+      description: `⚠️ DEPRECATED: Use execute_sandbox_code instead (98% fewer tokens).
+
+TRIGGER: Scan existing codebase structure before generating code. FOR TINY PROJECTS (<5 files) ONLY.
 RETURNS: { existingSteps[], existingPageObjects[], existingUtils[] }
 NEXT: Use results to inform test generation → Call generate_gherkin_pom_test_suite.
 COST: High (reads ALL source files — use execute_sandbox_code for large projects, 98% fewer tokens)
 ERROR_HANDLING: Standard
 
-Analyzes the codebase using AST. Only use this for very small projects (< 5 files). FOR LARGE PROJECTS, ALWAYS USE 'execute_sandbox_code' (Turbo Mode) instead.
+⚠️ DEPRECATED TOOL - This tool reads all source files and is extremely token-heavy.
+USE 'execute_sandbox_code' INSTEAD for 98% token reduction.
+
+This tool only exists for backward compatibility with small projects (<5 files).
 
 OUTPUT: Ack (<= 10 words), proceed.`,
       inputSchema: z.object({

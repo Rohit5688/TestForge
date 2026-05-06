@@ -75,13 +75,23 @@ export function registerGenerateGherkinPomTestSuite(server: McpServer, container
   server.registerTool(
     "generate_gherkin_pom_test_suite",
     {
-      description: `TRIGGER: Call AFTER gather_test_context or inspect_page_dom — NOT before. Generates Playwright-BDD test suite.
+      description: `⚠️ SEQUENCE REQUIRED: Call inspect_page_dom(returnFormat:'yaml') FIRST, then this tool.
+
+TRIGGER: Call AFTER gather_test_context or inspect_page_dom — NOT before. Generates Playwright-BDD test suite.
 RETURNS: Rigid LLM system instruction context — causes chat completion to produce Playwright-BDD JSON (feature files + POM).
 NEXT: Follow returned instructions → Call validate_and_write with generated files.
 COST: Medium (~500-2000 tokens, includes codebase analysis)
 ERROR_HANDLING: Throws if no DOM context found — call gather_test_context first.
 
-Generates feature files and POM instructions. AUTO-INJECTION: If inspect_page_dom was previously called with returnFormat:'json', server auto-injects element reference into the prompt — no extra params needed.
+⚠️ CRITICAL WORKFLOW:
+1. Call inspect_page_dom(url, returnFormat:'yaml') to get verified selectors (~60% fewer tokens than json)
+2. Then call generate_gherkin_pom_test_suite (auto-injects selectors from step 1)
+3. Then call validate_and_write with generated files
+
+💡 RECOMMENDED: Use returnFormat:'yaml' (most compact) or 'json' for structured data.
+Avoid 'markdown' (verbose) unless you need human-readable output.
+
+AUTO-INJECTION: Server auto-injects element reference from inspect_page_dom — no manual param needed.
 
 OUTPUT: Ack (<= 10 words), proceed.`,
       inputSchema: z.object({

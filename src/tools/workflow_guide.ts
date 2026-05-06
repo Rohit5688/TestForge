@@ -29,7 +29,7 @@ export function registerWorkflowGuide(server: McpServer, container: ServiceConta
           "description": "Standard flow for creating and verifying a new automated test.",
           "steps": [
             "1. Call get_project_contract(projectRoot) FIRST — confirms wrapper methods, dirs, executionCommand. Eliminates guessing.",
-            "2. Call inspect_page_dom(url, returnFormat:'json') to fetch semantic locators + quality warnings.",
+            "2. Call inspect_page_dom(url, returnFormat:'yaml') to fetch semantic locators (~60% fewer tokens than json).",
             "3. Call generate_gherkin_pom_test_suite with testDescription. Use preview:true to see plan before writing.",
             "4. Call validate_and_write with generated files. Read [WRITE DIFF] on success, [REJECTION] on failure.",
             "5. If verification failed → call self_heal_test — context is auto-loaded from validate_and_write run."

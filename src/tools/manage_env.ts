@@ -35,7 +35,14 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
         return textResult(JSON.stringify(envManager.read(projectRoot), null, 2));
       } else if (action === "write") {
         const res = envManager.write(projectRoot, entries || []);
-        return textResult(JSON.stringify(res, null, 2));
+        let output = JSON.stringify(res, null, 2);
+        
+        // Add explanation when keys are skipped
+        if (res.skipped.length > 0) {
+          output += `\n\n⚠️  Keys skipped: ${res.skipped.join(', ')}\nReason: Values already exist in .env (use overwrite flag to force update)`;
+        }
+        
+        return textResult(output);
       } else if (action === "scaffold") {
         const res = envManager.scaffold(projectRoot);
         return textResult(JSON.stringify(res, null, 2));
