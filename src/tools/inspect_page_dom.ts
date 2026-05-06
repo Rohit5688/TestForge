@@ -107,12 +107,18 @@ OUTPUT: Ack (<= 10 words), proceed.`,
     },
     async (args) => {
       const { url, projectRoot, waitForSelector, returnFormat, includeIframes, storageState, actionSequence, saveStorageState, enableVisualMode } = args as any;
-      // Read enableVisualExploration from mcp-config.json if not explicitly passed
+      // Read enableVisualExploration and domInspection timeout from mcp-config.json if not explicitly passed
       let visualMode = !!enableVisualMode;
-      if (!visualMode && projectRoot) {
+      let inspectTimeout = 60000;
+      if (projectRoot) {
         try {
           const cfg = mcpConfig.read(projectRoot);
-          visualMode = !!cfg.enableVisualExploration;
+          if (!enableVisualMode) {
+            visualMode = !!cfg.enableVisualExploration;
+          }
+          if (cfg.timeouts?.domInspection) {
+            inspectTimeout = cfg.timeouts.domInspection;
+          }
         } catch { /* soft fail */ }
       }
       validateUrl(url);
@@ -123,7 +129,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         storageState,
         includeIframes,
         actionSequence,
-        60000, // timeoutMs — increased to support login actionSequence flows
+        inspectTimeout, // timeoutMs — from config or default 60000
         visualMode, // enableVisualMode — from param or mcp-config.json enableVisualExploration
         format as any,
         projectRoot,

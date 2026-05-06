@@ -63,6 +63,8 @@ export interface McpConfig {
     sessionStart: number;
     /** Max attempts for the validate_and_write self-healing loop. */
     healingMax: number;
+    /** Maximum time (in ms) for dom inspection loading before timing out. */
+    domInspection?: number;
   };
 
   /**
@@ -202,7 +204,8 @@ export const DEFAULT_CONFIG: McpConfig = {
   timeouts: {
     testRun: 120_000,
     sessionStart: 30000,
-    healingMax: 3
+    healingMax: 3,
+    domInspection: 60000
   },
   retries: 1,
   backgroundBlockThreshold: 3,
