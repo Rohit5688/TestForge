@@ -40,15 +40,34 @@ function extractFailureClass(output: string): string | null {
   return match?.[1] ?? null;
 }
 
+/**
+ * Extract failed locators using the same 5-pattern approach as SelfHealingService:
+ *   1. callLog: "- waiting for locator(...)"
+ *   2. legacy: "Locator: locator(...)"
+ *   3. expectTimeout: "waiting for locator(...) to be visible"
+ *   4. strictMode: "locator(...) resolved to N elements"
+ *   5. generic getBy* calls in error block
+ */
 function extractFailedLocators(output: string): string[] {
-  const locators: string[] = [];
-  const pattern = /(?:getBy\w+\([^)]+\)|locator\(['"`][^'"` ]+['"`]\))/g;
-  const surrounding = output.slice(0, 8000);
+  const found: string[] = [];
   let m: RegExpExecArray | null;
-  while ((m = pattern.exec(surrounding)) !== null) {
-    if (!locators.includes(m[0])) locators.push(m[0]);
-  }
-  return locators;
+
+  const callLog = /[-\u2013]\s*waiting for\s+(locator\([^)]+\)|getBy\w+\([^)]*\))/g;
+  while ((m = callLog.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  const legacyLoc = /^\s*Locator:\s+(.+)$/gm;
+  while ((m = legacyLoc.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  const expectTimeout = /waiting for\s+(locator\([^)]+\)|getBy\w+\([^)]*\))(?:\s+to\s+\w+)?/g;
+  while ((m = expectTimeout.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  const strictMode = /(locator\([^)]+\)|getBy\w+\([^)]*\))\s+resolved to \d+ elements/g;
+  while ((m = strictMode.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  const getBy = /\b(getBy(?:Role|Text|Label|Placeholder|AltText|Title|TestId)\([^)]+\))/g;
+  while ((m = getBy.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  return found;
 }
 
 export function registerGetTestRunStatus(server: McpServer, container: ServiceContainer) {

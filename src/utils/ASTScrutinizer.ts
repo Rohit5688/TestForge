@@ -186,6 +186,103 @@ export class ASTScrutinizer {
   }
 
   /**
+   * Lightweight structural guard for LLM-generated Gherkin (.feature) files.
+   *
+   * Does NOT require a full Gherkin AST parser (@cucumber/gherkin).
+   * Only checks the three structural failures that survive generation-time prompt rules:
+   *
+   *  1. Missing "Feature:" header — caused by LLM truncation or hallucination.
+   *     bddgen error: "No feature file found" or cryptic file-not-found.
+   *
+   *  2. No Scenario/Scenario Outline — empty feature file that generates zero tests.
+   *     bddgen silently succeeds but produces nothing, confusing self-healing.
+   *
+   *  3. Scenario Outline without an Examples: table — bddgen throws:
+   *     "ScenarioOutline requires at least one Examples block" which the LLM
+   *     misattributes to a step-definition error.
+   *
+   * @throws {McpError} with an actionable message if any check fails.
+   */
+  public static scrutinizeGherkin(fileContent: string, fileName: string): void {
+    if (!fileName.endsWith('.feature')) return;
+
+    const lines = fileContent.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    // Check 1: Feature: header must exist
+    const hasFeatureHeader = lines.some(l => /^Feature\s*:/i.test(l));
+    if (!hasFeatureHeader) {
+      throw McpErrors.projectValidationFailed(
+        `Gherkin validation failed in '${fileName}': Missing "Feature:" header.\n` +
+        `Every .feature file MUST start with "Feature: <description>".\n` +
+        `This is likely caused by response truncation — regenerate the complete file.`
+      );
+    }
+
+    // Check 2: At least one Scenario or Scenario Outline
+    const hasScenario = lines.some(l => /^Scenario(?:\s+Outline)?\s*:/i.test(l));
+    if (!hasScenario) {
+      throw McpErrors.projectValidationFailed(
+        `Gherkin validation failed in '${fileName}': No "Scenario:" or "Scenario Outline:" found.\n` +
+        `A feature file with no scenarios generates zero tests. Add at least one scenario.`
+      );
+    }
+
+    // Check 3: Every Scenario Outline must have an Examples: block
+    // Walk line by line: when we hit a Scenario Outline, set a flag;
+    // clear it when we find Examples:; error if the next Scenario/Feature/EOF arrives first.
+    let pendingOutline = '';
+    for (const line of lines) {
+      if (/^Scenario\s+Outline\s*:/i.test(line)) {
+        pendingOutline = line;
+      } else if (/^Examples\s*:/i.test(line)) {
+        pendingOutline = '';  // satisfied
+      } else if (pendingOutline && /^(?:Scenario|Feature|Rule)\s*:/i.test(line)) {
+        throw McpErrors.projectValidationFailed(
+          `Gherkin validation failed in '${fileName}': "${pendingOutline}" has no "Examples:" table.\n` +
+          `Every Scenario Outline MUST have an Examples: data table.\n` +
+          `Add the Examples: block, or change this to a plain "Scenario:" if no data table is needed.`
+        );
+      }
+    }
+    // Check final pending outline (EOF without Examples)
+    if (pendingOutline) {
+      throw McpErrors.projectValidationFailed(
+        `Gherkin validation failed in '${fileName}': "${pendingOutline}" has no "Examples:" table.\n` +
+        `Every Scenario Outline MUST have an Examples: data table.`
+      );
+    }
+
+    // Check 4: Step keywords validation inside Scenario, Scenario Outline, and Background
+    let inScenarioOrBackground = false;
+    let inDocString = false;
+    const linesWithOrig = fileContent.split('\n');
+    for (let i = 0; i < linesWithOrig.length; i++) {
+      const lineRaw = linesWithOrig[i];
+      if (lineRaw === undefined) continue;
+      const line = lineRaw.trim();
+      if (!line) continue;
+      if (line.startsWith('"""')) {
+        inDocString = !inDocString;
+        continue;
+      }
+      if (inDocString) continue;
+
+      if (/^(Scenario|Scenario Outline|Background)\s*:/i.test(line)) {
+        inScenarioOrBackground = true;
+      } else if (/^(Feature|Rule)\s*:/i.test(line)) {
+        inScenarioOrBackground = false;
+      } else if (inScenarioOrBackground && !line.startsWith('#') && !line.startsWith('@') && !line.startsWith('|') && !/^Examples\s*:/i.test(line)) {
+        if (!line.match(/^(Given|When|Then|And|But|\*)/i)) {
+          throw McpErrors.projectValidationFailed(
+            `Gherkin validation failed in '${fileName}' at line ${i + 1}:\n"${lineRaw}"\n` +
+            `Expected a valid Gherkin keyword (Given, When, Then, And, But, *).`
+          );
+        }
+      }
+    }
+  }
+
+  /**
    * Extracts BDD step patterns from file content (Given, When, Then).
    */
   public static extractSteps(fileContent: string): string[] {

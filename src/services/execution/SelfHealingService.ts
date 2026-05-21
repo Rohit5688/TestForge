@@ -220,24 +220,122 @@ export class SelfHealingService {
 
   private extractFailedLocators(output: string): string[] {
     const locators: string[] = [];
-    // Match Playwright locator expressions like: getByRole('link', { name: 'HTMLEditor' })
-    const locatorRegex = /Locator:\s+(.+)/g;
-    let match;
-    while ((match = locatorRegex.exec(output)) !== null) {
+    let match: RegExpExecArray | null;
+
+    /**
+     * Pattern 1 (legacy): "Locator: locator('.submit-btn')"
+     * Emitted by older Playwright versions and assertion failures.
+     */
+    const legacyPattern = /^\s*Locator:\s+(.+)$/gm;
+    while ((match = legacyPattern.exec(output)) !== null) {
       if (match[1]) locators.push(match[1].trim());
     }
+
+    /**
+     * Pattern 2 (modern action timeout): "  - waiting for locator('.submit-btn')"
+     * Emitted inside "Call log:" blocks for .click(), .fill(), etc. timeouts.
+     */
+    const callLogPattern = /[-–]\s*waiting for\s+(locator\([^)]+\)|getBy\w+\([^)]*\))/g;
+    while ((match = callLogPattern.exec(output)) !== null) {
+      if (match[1]) locators.push(match[1].trim());
+    }
+
+    /**
+     * Pattern 3 (expect timeout): "waiting for locator('...') to be visible"
+     * Emitted by web-first assertions like expect(locator).toBeVisible().
+     */
+    const expectPattern = /waiting for\s+(locator\([^)]+\)|getBy\w+\([^)]*\))(?:\s+to\s+\w+)?/g;
+    while ((match = expectPattern.exec(output)) !== null) {
+      if (match[1]) locators.push(match[1].trim());
+    }
+
+    /**
+     * Pattern 4 (strict mode / resolved to N elements):
+     * "locator('css=.btn') resolved to 3 elements"
+     */
+    const strictModePattern = /(locator\([^)]+\)|getBy\w+\([^)]*\))\s+resolved to \d+ elements/g;
+    while ((match = strictModePattern.exec(output)) !== null) {
+      if (match[1]) locators.push(match[1].trim());
+    }
+
+    /**
+     * Pattern 5 (generic getBy* calls outside call logs):
+     * Catches any getByRole/getByText/getByLabel etc. in the raw error block.
+     */
+    const getByPattern = /\b(getBy(?:Role|Text|Label|Placeholder|AltText|Title|TestId)\([^)]+\))/g;
+    while ((match = getByPattern.exec(output)) !== null) {
+      if (match[1]) locators.push(match[1].trim());
+    }
+
     return [...new Set(locators)];
   }
 
   private extractFailedFiles(output: string): string[] {
     const files: string[] = [];
-    // Match paths like "at AjaxToolkitPage.navigateToHTMLEditor (C:\...\AjaxToolkitPage.ts:9:34)"
-    const fileRegex = /\(([A-Za-z]:\\[^\s:)]+\.ts):\d+:\d+\)/g;
-    let match;
-    while ((match = fileRegex.exec(output)) !== null) {
+    let match: RegExpExecArray | null;
+
+    /**
+     * Pattern A — Windows absolute paths: (C:\path\to\LoginPage.ts:9:34)
+     * Covers both user POMs and node_module frames; we filter below.
+     */
+    const winPattern = /\(([A-Za-z]:\\[^\s:)]+\.ts):\d+:\d+\)/g;
+    while ((match = winPattern.exec(output)) !== null) {
       if (match[1]) files.push(match[1]);
     }
-    return [...new Set(files)];
+
+    /**
+     * Pattern B — POSIX absolute paths: (/home/runner/work/.../LoginPage.ts:9:34)
+     * Needed for CI (Linux/macOS) environments.
+     */
+    const posixPattern = /\((\/[^\s:)]+\.ts):\d+:\d+\)/g;
+    while ((match = posixPattern.exec(output)) !== null) {
+      if (match[1]) files.push(match[1]);
+    }
+
+    /**
+     * Filter 1: drop any path through node_modules.
+     * Eliminates ALL npm-installed wrapper frames (vasu-playwright-utils,
+     * @myorg/helpers, etc.) regardless of package name.
+     */
+    const userFiles = [...new Set(files)].filter(
+      f => !f.includes('node_modules')
+    );
+
+    /**
+     * Filter 2: heuristic ranking for in-project wrappers.
+     *
+     * Playwright's "> N | <code>" source snippet always points to the
+     * OUTERMOST user frame — the POM or step-definition — not intermediate
+     * in-project wrappers (BasePage.ts, MyHelper.ts, etc.).
+     *
+     * Strategy: extract file basenames that appear in "> N |" lines, then
+     * promote those files to the front of the list. Everything else (likely
+     * in-project wrappers) is still returned but deprioritised.
+     *
+     * This works for ANY unknown custom wrapper because it relies solely on
+     * what Playwright already printed, with zero static code analysis.
+     */
+    const failingCodeLines = output.match(/>\s+\d+ \|\s+.+/g) ?? [];
+    const anchorNames = new Set(
+      userFiles
+        .map(f => f.replace(/\\/g, '/').split('/').pop() ?? '')  // basename
+        .filter(name =>
+          failingCodeLines.some(line => line.includes(name.replace('.ts', '')))
+        )
+    );
+
+    const ranked = [
+      ...userFiles.filter(f => {
+        const base = f.replace(/\\/g, '/').split('/').pop() ?? '';
+        return anchorNames.has(base);
+      }),
+      ...userFiles.filter(f => {
+        const base = f.replace(/\\/g, '/').split('/').pop() ?? '';
+        return !anchorNames.has(base);
+      }),
+    ];
+
+    return ranked;
   }
 
   private extractFailedLines(output: string): string[] {

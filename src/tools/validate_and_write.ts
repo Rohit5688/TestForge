@@ -160,13 +160,29 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       // 3. Verification run
       let testResultRaw = await runner.runTests(projectRoot);
 
-      // Write to shared store so self_heal_test auto-loads context if verification fails
+      // Write to shared store so self_heal_test auto-loads context if verification fails.
+      // Extract failureClass + failedLocators so self_heal_test has full ripple audit data.
+      const failureClass = testResultRaw.output.match(/\[ERROR DNA\] class:\s*(\w+)/)?.[1] ?? null;
+      const failedLocators: string[] = testResultRaw.passed ? [] : (() => {
+        const found: string[] = [];
+        let m: RegExpExecArray | null;
+        // Targeted patterns only — same 5-pattern approach as SelfHealingService
+        const callLog = /[-–]\s*waiting for\s+(locator\([^)]+\)|getBy\w+\([^)]*\))/g;
+        while ((m = callLog.exec(testResultRaw.output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+        const legacyLoc = /^\s*Locator:\s+(.+)$/gm;
+        while ((m = legacyLoc.exec(testResultRaw.output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+        const strictMode = /(locator\([^)]+\)|getBy\w+\([^)]*\))\s+resolved to \d+ elements/g;
+        while ((m = strictMode.exec(testResultRaw.output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+        const getBy = /\b(getBy(?:Role|Text|Label|Placeholder|AltText|Title|TestId)\([^)]+\))/g;
+        while ((m = getBy.exec(testResultRaw.output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+        return found;
+      })();
       LastResultStore.getInstance().write({
         projectRoot,
         passed: testResultRaw.passed,
         output: testResultRaw.output,
-        failureClass: null,
-        failedLocators: [],
+        failureClass,
+        failedLocators,
         timestamp: Date.now(),
       });
 

@@ -9,17 +9,34 @@ import * as fs from "fs";
 import * as path from "path";
 import { randomUUID } from "crypto";
 
-/** Extract failed locators from test output for ripple audit + flakiness tracking. */
+/**
+ * Extract failed locators using the same 5-pattern approach as SelfHealingService:
+ *   1. callLog: "- waiting for locator(...)"
+ *   2. legacy: "Locator: locator(...)"
+ *   3. expectTimeout: "waiting for locator(...) to be visible"
+ *   4. strictMode: "locator(...) resolved to N elements"
+ *   5. generic getBy* calls in error block
+ */
 function extractFailedLocators(output: string): string[] {
-  const locators: string[] = [];
-  // Playwright locator patterns: getByRole, getByLabel, getByText, getByTestId, locator(...)
-  const pattern = /(?:getBy\w+\([^)]+\)|locator\(['"`][^'"` ]+['"`]\))/g;
-  const surrounding = output.slice(0, 8000); // cap scan
+  const found: string[] = [];
   let m: RegExpExecArray | null;
-  while ((m = pattern.exec(surrounding)) !== null) {
-    if (!locators.includes(m[0])) locators.push(m[0]);
-  }
-  return locators;
+
+  const callLog = /[-\u2013]\s*waiting for\s+(locator\([^)]+\)|getBy\w+\([^)]*\))/g;
+  while ((m = callLog.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  const legacyLoc = /^\s*Locator:\s+(.+)$/gm;
+  while ((m = legacyLoc.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  const expectTimeout = /waiting for\s+(locator\([^)]+\)|getBy\w+\([^)]*\))(?:\s+to\s+\w+)?/g;
+  while ((m = expectTimeout.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  const strictMode = /(locator\([^)]+\)|getBy\w+\([^)]*\))\s+resolved to \d+ elements/g;
+  while ((m = strictMode.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  const getBy = /\b(getBy(?:Role|Text|Label|Placeholder|AltText|Title|TestId)\([^)]+\))/g;
+  while ((m = getBy.exec(output)) !== null) if (m[1] && !found.includes(m[1])) found.push(m[1].trim());
+
+  return found;
 }
 
 /** Extract ERROR DNA failure class from output */
@@ -100,12 +117,19 @@ OUTPUT: Ack (<= 10 words), proceed.`,
 
         // Build command — same logic as TestRunnerService but as shell string
         const cmd = overrideCommand || 'npm test';
-        const fullCmd = tags ? `TAGS="${tags}" ${cmd}` : cmd;
         const logStream = fs.openSync(logPath, 'w');
 
-        const child = spawn('sh', ['-c', fullCmd], {
+        // Cross-platform spawn: Windows has no `sh`, use `cmd /c` instead.
+        // Tags are injected via the child env, NOT as shell prefix (TAGS=... cmd),
+        // which is bash-only and breaks on Windows cmd/powershell.
+        const isWin = process.platform === 'win32';
+        const [shell, shellFlag] = isWin ? ['cmd.exe', '/c'] : ['sh', '-c'];
+        const childEnv = { ...process.env, ...(tags ? { TAGS: tags } : {}) };
+
+        const child = spawn(shell, [shellFlag, cmd], {
           cwd: projectRoot,
           detached: true,
+          env: childEnv,
           stdio: ['ignore', logStream, logStream],
         });
         fs.writeFileSync(pidPath, String(child.pid ?? ''));

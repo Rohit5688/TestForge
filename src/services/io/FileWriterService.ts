@@ -160,6 +160,19 @@ export class FileWriterService {
           }, null, 2);
         }
       }
+      if (file.path.endsWith('.feature')) {
+        try {
+          ASTScrutinizer.scrutinizeGherkin(file.content, file.path);
+        } catch (validationError: any) {
+          return JSON.stringify({
+            success: false,
+            phase: 'gherkin-validation',
+            error: validationError.message || String(validationError),
+            file: file.path,
+            hint: 'Fix the Gherkin structure error above before saving. Do not run bddgen until this is resolved.'
+          }, null, 2);
+        }
+      }
     }
 
     if (dryRun) {

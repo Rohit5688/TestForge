@@ -5,6 +5,7 @@ import * as os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import type { GeneratedFile } from '../io/FileWriterService.js';
+import { ASTScrutinizer } from '../../utils/ASTScrutinizer.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +27,13 @@ export class StagingService {
     const stagingDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-staging-'));
 
     try {
+      // 0. Validate Gherkin files first
+      for (const file of files) {
+        if (file.path.endsWith('.feature')) {
+          ASTScrutinizer.scrutinizeGherkin(file.content, file.path);
+        }
+      }
+
       // 1. Write the files to the staging directory
       for (const file of files) {
         const fullPath = path.join(stagingDir, file.path);

@@ -64,14 +64,16 @@ Analyzes Playwright Error DNA to determine if it's a SCRIPTING issue or an APPLI
 
 OUTPUT: Ack (<= 10 words), proceed.`,
       inputSchema: z.object({
+        // errorDna is optional — when omitted, auto-injected from LastResultStore (last run_playwright_test
+        // result for this projectRoot). Provide manually only when auto-inject is unavailable or stale.
         "errorDna": z.object({
           "code": z.enum(["Infrastructure", "Logic", "Transient"]),
           "causalChain": z.string(),
           "originalError": z.string(),
           "reason": z.string()
-        }).describe("The structured Error DNA object returned by the failing run_playwright_test output block."),
-        "projectRoot": z.string().optional().describe("Optional absolute path to the automation project for loading config timeouts."),
-        "pageUrl": z.string().optional().describe("Optional URL of the page being tested. If provided, the healer will call inspect_page_dom automatically to fetch fresh selectors.")
+        }).optional().describe("Structured Error DNA from run_playwright_test. Omit to auto-load from last run (if <10 min old)."),
+        "projectRoot": z.string().optional().describe("Absolute path to the automation project. Required for auto-inject and ripple audit."),
+        "pageUrl": z.string().optional().describe("URL of the page under test. When provided, the healer re-inspects live DOM for fresh selectors.")
       }),
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: false }
     },
