@@ -2,12 +2,22 @@
 // Error.stackTraceLimit patch in index.ts runs first (ESM hoist issue on Windows/Node 20+).
 import type { Browser, BrowserContext, Page, Locator } from 'playwright';
 import { withRetry, RetryPolicies } from '../../utils/RetryEngine.js';
+import { importPlaywright } from '../../utils/PlaywrightRuntime.js';
 
 export interface SessionOptions {
   headless?: boolean;
   viewport?: { width: number; height: number };
   storageState?: string;
   userAgent?: string;
+}
+
+function parseSessionResult(raw: string): { success?: boolean; error?: string } | null {
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 export class PlaywrightSessionService {
@@ -30,7 +40,7 @@ export class PlaywrightSessionService {
     try {
       // Lazy import — ensures Error.stackTraceLimit patch in index.ts fires before playwright loads.
       // Top-level ESM import would be hoisted past the patch, causing read-only property error on Windows/Node 20+.
-      const { chromium } = await import('playwright');
+      const { chromium } = await importPlaywright();
 
       // TF-NEW-02: Retry browser launch — transient in CI (missing binary, stale lock, etc.)
       const launchResult = await withRetry(
@@ -95,7 +105,18 @@ export class PlaywrightSessionService {
   public async navigate(url: string, waitUntil: 'load' | 'domcontentloaded' | 'networkidle' = 'load', timeoutMs: number = 30000, screenshot: boolean = false, projectRoot?: string): Promise<string> {
     if (!this.page) {
        // Auto-start if forgotten
-       await this.startSession();
+       const startResult = await this.startSession();
+       const parsedStart = parseSessionResult(startResult);
+       if (parsedStart?.success === false) {
+         return startResult;
+       }
+       if (!this.page) {
+         return JSON.stringify({
+           success: false,
+           error: 'Failed to navigate: session auto-start did not create a browser page.',
+           startResult: parsedStart ?? startResult
+         }, null, 2);
+       }
     }
 
     try {

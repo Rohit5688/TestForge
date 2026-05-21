@@ -3,36 +3,40 @@ import { z } from "zod";
 import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult } from "./_helpers.js";
 import { LastResultStore } from "../services/system/LastResultStore.js";
+import { parseStructuredFailures } from "./run_playwright_test.js";
 import * as fs from "fs";
 import * as path from "path";
 
-/** Parse structured failures from log file content — same logic as run_playwright_test */
-function parseStructuredFailures(output: string): {
-  passed: number; failed: number;
-  failures: { test: string; file: string; line: number; error: string }[];
-} {
-  const passedMatch = output.match(/(\d+)\s+passed/);
-  const failedMatch = output.match(/(\d+)\s+failed/);
-  const passed = passedMatch?.[1] ? parseInt(passedMatch[1]) : 0;
-  const failed = failedMatch?.[1] ? parseInt(failedMatch[1]) : 0;
-  const failures: { test: string; file: string; line: number; error: string }[] = [];
-  const testBlockRe = /●\s+(.+?)\n([\s\S]+?)(?=\n\s*●|\n\s*\d+\s+(?:passed|failed)|$)/g;
-  let m: RegExpExecArray | null;
-  while ((m = testBlockRe.exec(output)) !== null) {
-    const testName = (m[1] ?? '').trim();
-    const block = m[2] ?? '';
-    const errMatch = block.match(/Error:\s*(.+)/);
-    const error = errMatch?.[1]
-      ? errMatch[1].trim()
-      : (block.split('\n').find(l => l.trim())?.trim() ?? 'unknown');
-    const fileMatch = block.match(/\(([^)]+\.(?:ts|js|feature)):(\d+)/);
-    const rawFile = fileMatch?.[1] ?? '';
-    const file = rawFile ? (rawFile.split('/').pop() ?? rawFile) : 'unknown';
-    const line = fileMatch?.[2] ? parseInt(fileMatch[2]) : 0;
-    failures.push({ test: testName, file, line, error });
-    if (failures.length >= 20) break;
+export function readDetachedRunCompletion(donePath: string): { completedAt: number | null; exitCode: number | null; signal: string | null } {
+  try {
+    const raw = fs.readFileSync(donePath, 'utf-8').trim();
+    const parsed = JSON.parse(raw);
+    return {
+      completedAt: typeof parsed.completedAt === 'number' ? parsed.completedAt : null,
+      exitCode: typeof parsed.exitCode === 'number' ? parsed.exitCode : null,
+      signal: typeof parsed.signal === 'string' ? parsed.signal : null,
+    };
+  } catch {
+    const legacyTimestamp = Number(fs.readFileSync(donePath, 'utf-8').trim());
+    return {
+      completedAt: Number.isFinite(legacyTimestamp) ? legacyTimestamp : null,
+      exitCode: null,
+      signal: null,
+    };
   }
-  return { passed, failed, failures };
+}
+
+export function summarizeDetachedRunStatus(output: string, exitCode: number | null = null) {
+  const structured = parseStructuredFailures(output);
+  const noTestsRan = structured.noTestsRan || (
+    structured.passed === 0 && structured.failed === 0 && structured.skipped === 0
+  );
+  const didPass = !noTestsRan && structured.failed === 0 && (exitCode === null || exitCode === 0);
+  return {
+    status: didPass ? 'passed' : 'failed',
+    ...structured,
+    noTestsRan,
+  };
 }
 
 function extractFailureClass(output: string): string | null {
@@ -101,29 +105,29 @@ OUTPUT: Ack (<= 10 words), proceed.`,
       }
 
       // Done — parse results and write to LastResultStore
-      const structured = parseStructuredFailures(output);
-      const passed = structured.failed === 0;
+      const completion = readDetachedRunCompletion(donePath);
+      const structured = summarizeDetachedRunStatus(output, completion.exitCode);
 
       store.write({
         projectRoot,
-        passed,
+        passed: structured.status === 'passed',
         output: output.slice(0, 8000),
         failureClass: extractFailureClass(output),
-        failedLocators: passed ? [] : extractFailedLocators(output),
+        failedLocators: structured.status === 'passed' ? [] : extractFailedLocators(output),
         timestamp: Date.now(),
       });
 
       // Cleanup pid file
       try { if (fs.existsSync(pidPath)) fs.unlinkSync(pidPath); } catch { /* ignore */ }
 
-      const failureBlock = structured.failed > 0
+      const failureBlock = (structured.failed > 0 || structured.noTestsRan)
         ? `\n[FAILURES]\n${JSON.stringify(structured, null, 2)}`
         : `\n[FAILURES] passed=${structured.passed} failed=0`;
 
       return textResult(JSON.stringify({
-        status: passed ? 'passed' : 'failed',
         runId,
         logPath,
+        ...completion,
         ...structured,
       }, null, 2) + failureBlock);
     }

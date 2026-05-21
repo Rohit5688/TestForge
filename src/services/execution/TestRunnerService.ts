@@ -1,13 +1,14 @@
-import { McpErrors, McpError, McpErrorCode } from '../../types/ErrorSystem.js';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import type { ITestRunner, TestRunnerResult } from '../../interfaces/ITestRunner.js';
+import type { ITestRunner, TestRunnerResult, TestRunFilters } from '../../interfaces/ITestRunner.js';
 import { sanitizeShellArg } from '../../utils/SecurityUtils.js';
-import { ShellSecurityEngine } from '../../utils/ShellSecurityEngine.js';
 import { withRetry, RetryPolicies } from '../../utils/RetryEngine.js';
 import { ExtensionLoader } from '../../utils/ExtensionLoader.js';
+import { buildTrustedCommandPlan, parseCommandLine } from '../../utils/CommandPolicy.js';
+import { McpErrors } from '../../types/ErrorSystem.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -15,6 +16,34 @@ const DEFAULT_TIMEOUT_MS = 120_000; // 2 minutes
 
 import { McpConfigService } from '../config/McpConfigService.js';
 import { EnvManagerService } from '../config/EnvManagerService.js';
+
+function quoteCommandArg(arg: string): string {
+  return /[\s"'\\]/.test(arg) ? JSON.stringify(arg) : arg;
+}
+
+export function extractFeaturePathsFromArgs(args?: string): string[] {
+  if (!args?.trim()) return [];
+  const parts = parseCommandLine(args);
+  const featurePaths: string[] = [];
+  for (const part of parts) {
+    const withoutLine = part.replace(/:\d+(:\d+)?$/, '');
+    if (withoutLine.endsWith('.feature') && !featurePaths.includes(withoutLine)) {
+      featurePaths.push(withoutLine);
+    }
+  }
+  return featurePaths;
+}
+
+function extractGrepFromArgs(args?: string): string | undefined {
+  if (!args?.trim()) return undefined;
+  const parts = parseCommandLine(args);
+  for (let i = 0; i < parts.length; i++) {
+    if ((parts[i] === '--grep' || parts[i] === '-g') && parts[i + 1]) {
+      return parts[i + 1];
+    }
+  }
+  return undefined;
+}
 
 /**
  * TestRunnerService
@@ -36,7 +65,8 @@ export class TestRunnerService implements ITestRunner {
     projectRoot: string,
     specificTestArgs?: string,
     timeoutMs?: number,
-    executionCommand?: string
+    executionCommand?: string,
+    filters?: TestRunFilters
   ): Promise<TestRunnerResult> {
     const config = this.configService.read(projectRoot);
     const runTimeout = timeoutMs ?? config.timeouts?.testRun ?? DEFAULT_TIMEOUT_MS;
@@ -44,24 +74,38 @@ export class TestRunnerService implements ITestRunner {
     // Load env file per config.currentEnvironment
     const envManager = new EnvManagerService();
     const envResult = envManager.read(projectRoot, config.currentEnvironment);
-    const mergedEnv = { ...process.env, ...envResult.values, FORCE_COLOR: '0' };
+    const mergedEnv: NodeJS.ProcessEnv = { ...process.env, ...envResult.values, FORCE_COLOR: '0' };
 
     try {
       // Phase 35: Sanitize user-supplied arguments before shell interpolation
       const safeArgs = specificTestArgs ? sanitizeShellArg(specificTestArgs) : '';
+      const safeTags = filters?.tags ? sanitizeShellArg(filters.tags) : extractGrepFromArgs(safeArgs);
+      const featurePaths = filters?.featurePaths?.length
+        ? filters.featurePaths
+        : extractFeaturePathsFromArgs(safeArgs);
+      if (safeTags) {
+        mergedEnv.TAGS = safeTags;
+      }
 
-      const bddConfig = config.playwrightConfig ? ` --config ${sanitizeShellArg(config.playwrightConfig)}` : '';
-      const pwConfig = config.playwrightConfig ? ` --config ${sanitizeShellArg(config.playwrightConfig)}` : '';
-      let command = `npx bddgen${bddConfig} && npx playwright test${pwConfig}`;
+      const filteredConfig = !executionCommand && !config.executionCommand && featurePaths.length > 0
+        ? this.createFeatureFilteredPlaywrightConfig(projectRoot, config.playwrightConfig, featurePaths)
+        : undefined;
+      const playwrightConfigPath = filteredConfig ?? config.playwrightConfig;
+      const bddConfig = playwrightConfigPath ? ` --config ${quoteCommandArg(sanitizeShellArg(playwrightConfigPath))}` : '';
+      const pwConfig = playwrightConfigPath ? ` --config ${quoteCommandArg(sanitizeShellArg(playwrightConfigPath))}` : '';
+      const bddTags = safeTags ? ` --tags ${quoteCommandArg(safeTags)}` : '';
+      let command = `npx bddgen${bddConfig}${bddTags} && npx playwright test${pwConfig}`;
 
       if (executionCommand) {
         command = executionCommand;
+      } else if (config.executionCommand) {
+        command = config.executionCommand;
       } else {
         // Auto-detect package manager locally if no custom executionCommand provided
         if (fs.existsSync(path.join(projectRoot, 'yarn.lock'))) {
-          command = `yarn bddgen${bddConfig} && yarn playwright test${pwConfig}`;
+          command = `yarn bddgen${bddConfig}${bddTags} && yarn playwright test${pwConfig}`;
         } else if (fs.existsSync(path.join(projectRoot, 'pnpm-lock.yaml'))) {
-          command = `pnpm bddgen${bddConfig} && pnpm exec playwright test${pwConfig}`;
+          command = `pnpm bddgen${bddConfig}${bddTags} && pnpm exec playwright test${pwConfig}`;
         }
       }
       
@@ -76,39 +120,14 @@ export class TestRunnerService implements ITestRunner {
       const commandWithTsconfig = command.replace(/(playwright test[\S\s]*?)(?=\s*$|&&)/, `$1${tsconfigArg}`);
       const fullCommand = `${commandWithTsconfig} ${argsToAppend}`.trim();
 
-      const commandSegments = fullCommand.split('&&').map(c => c.trim()).filter(Boolean);
+      const commandSegments = buildTrustedCommandPlan(fullCommand);
 
       let aggregatedStdout = '';
       let aggregatedStderr = '';
 
-      for (const cmdStr of commandSegments) {
-        const parts = cmdStr.split(/\s+/).filter(p => p.length > 0);
-        let exe = parts.shift();
-        if (!exe) throw McpErrors.invalidExecutable(cmdStr);
-        
-        // Prevent path traversal in executable
-        if (exe.includes('..') || (exe.includes('/') && !exe.startsWith('/'))) {
-          throw McpErrors.invalidExecutable(exe);
-        }
-
-        // On Windows, package managers often need .cmd extension for execFile
+      for (const segment of commandSegments) {
+        const { exe, args } = segment;
         const isWin = process.platform === 'win32';
-        if (isWin && ['npm', 'npx', 'yarn', 'pnpm', 'bun'].includes(exe)) {
-          exe = `${exe}.cmd`;
-        }
-
-        const args = parts;
-
-        // TASK-48: Defense-in-depth — validate args with ShellSecurityEngine
-        // execFile already prevents shell metacharacter interpolation at the OS
-        // level, but this catches adversarial inputs before they reach the kernel.
-        const securityCheck = ShellSecurityEngine.validateArgs(args);
-        if (!securityCheck.safe) {
-          throw McpErrors.shellInjectionDetected(
-            `\n⛔ SHELL SECURITY VIOLATION in command segment "${cmdStr}":\n` +
-            ShellSecurityEngine.formatViolations(securityCheck)
-          );
-        }
 
         // TF-NEW-02: Retry transient EBUSY / ECONNRESET failures (common on Windows CI)
         const { value: execResult } = await withRetry(
@@ -152,6 +171,83 @@ export class TestRunnerService implements ITestRunner {
     }
   }
 
+  private createFeatureFilteredPlaywrightConfig(
+    projectRoot: string,
+    configuredPlaywrightConfig: string | undefined,
+    featurePaths: string[]
+  ): string | undefined {
+    const originalConfig = this.resolvePlaywrightConfig(projectRoot, configuredPlaywrightConfig);
+    if (!originalConfig) return undefined;
+
+    const configDir = path.join(projectRoot, '.TestForge', 'generated-configs');
+    fs.mkdirSync(configDir, { recursive: true });
+
+    const normalizedFeatures = featurePaths.map(featurePath => {
+      const cleanPath = featurePath.replace(/:\d+(:\d+)?$/, '');
+      const absolute = path.isAbsolute(cleanPath)
+        ? path.resolve(cleanPath)
+        : path.resolve(projectRoot, cleanPath);
+      const relative = path.relative(projectRoot, absolute).replace(/\\/g, '/');
+      if (relative.startsWith('../') || path.isAbsolute(relative) || !relative.endsWith('.feature')) {
+        throw McpErrors.invalidParameter(
+          'specificTestArgs',
+          `Feature path must be a .feature file inside projectRoot: ${featurePath}`,
+          'run_playwright_test'
+        );
+      }
+      return relative;
+    });
+    const hash = crypto
+      .createHash('sha1')
+      .update(`${originalConfig}\n${normalizedFeatures.join('\n')}`)
+      .digest('hex')
+      .slice(0, 12);
+    const generatedConfigPath = path.join(configDir, `bdd-filter-${hash}.playwright.config.ts`);
+    const relativeOriginal = path.relative(configDir, originalConfig).replace(/\\/g, '/');
+    const originalImport = relativeOriginal.startsWith('.') ? relativeOriginal : `./${relativeOriginal}`;
+    const bddEnvPath = path.join(projectRoot, 'node_modules', 'playwright-bdd', 'dist', 'config', 'env.js');
+
+    const content = [
+      "import { createRequire } from 'node:module';",
+      `import originalConfig from ${JSON.stringify(originalImport)};`,
+      '',
+      'const require = createRequire(import.meta.url);',
+      `const { getEnvConfigs } = require(${JSON.stringify(bddEnvPath)});`,
+      `const requestedFeatures = ${JSON.stringify(normalizedFeatures, null, 2)};`,
+      '',
+      'for (const bddConfig of Object.values(getEnvConfigs())) {',
+      '  bddConfig.features = requestedFeatures;',
+      '}',
+      '',
+      'export default originalConfig;',
+    ].join('\n');
+
+    fs.writeFileSync(generatedConfigPath, content, 'utf-8');
+    return path.relative(projectRoot, generatedConfigPath).replace(/\\/g, '/');
+  }
+
+  private resolvePlaywrightConfig(projectRoot: string, configuredPlaywrightConfig?: string): string | undefined {
+    if (configuredPlaywrightConfig) {
+      const configured = path.isAbsolute(configuredPlaywrightConfig)
+        ? configuredPlaywrightConfig
+        : path.join(projectRoot, configuredPlaywrightConfig);
+      return fs.existsSync(configured) ? configured : undefined;
+    }
+
+    for (const candidate of [
+      'playwright.config.ts',
+      'playwright.config.js',
+      'playwright.config.mts',
+      'playwright.config.mjs',
+      'playwright.config.cts',
+      'playwright.config.cjs'
+    ]) {
+      const candidatePath = path.join(projectRoot, candidate);
+      if (fs.existsSync(candidatePath)) return candidatePath;
+    }
+    return undefined;
+  }
+
   /**
    * Parses Playwright/BDD terminal output into a compact structured summary.
    * Prepended before raw output so LLM reads signal first without parsing the full log.
@@ -160,6 +256,12 @@ export class TestRunnerService implements ITestRunner {
     const lines = raw.split(/\r?\n/);
     let passed = 0, failed = 0, skipped = 0;
     for (const line of lines) {
+      const compact = line.match(/PASS\s*\((\d+)\).*FAIL\s*\((\d+)\)/i);
+      if (compact) {
+        passed = parseInt(compact[1]!, 10);
+        failed = parseInt(compact[2]!, 10);
+        continue;
+      }
       const m = line.match(/(\d+)\s+(passed|failed|skipped)/);
       if (m) {
         const n = parseInt(m[1]!, 10);

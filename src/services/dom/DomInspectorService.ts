@@ -1,9 +1,9 @@
-import { chromium } from 'playwright';
 import type { Browser, Frame } from 'playwright';
 import type { IDomInspector, ActionStep } from '../../interfaces/IDomInspector.js';
 import { ScreenshotStorage } from '../../utils/ScreenshotStorage.js';
 import { SmartDomExtractor } from '../../utils/SmartDomExtractor.js';
 import { McpConfigService } from '../../services/config/McpConfigService.js';
+import { importPlaywright } from '../../utils/PlaywrightRuntime.js';
 
 export type DomReturnFormat = 'markdown' | 'json' | 'yaml';
 
@@ -47,6 +47,7 @@ export class DomInspectorService implements IDomInspector {
           try { headless = !(new McpConfigService().read(projectRoot).enableVisualExploration); }
           catch { /* soft fail — stay headless */ }
         }
+        const { chromium } = await importPlaywright();
         browser = await chromium.launch({ headless });
         const contextArgs: { storageState?: string } = {};
         if (storageState) contextArgs.storageState = storageState;

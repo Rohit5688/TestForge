@@ -4,9 +4,9 @@
  * Launches a headless Playwright instance to spider dynamic web apps
  * and extract valid navigation edges and URLs.
  */
-import { chromium } from 'playwright';
 import type { Browser } from 'playwright';
 import { StaticRouteScanner } from './StaticRouteScanner.js';
+import { importPlaywright } from '../../utils/PlaywrightRuntime.js';
 
 export interface NavGraphMutator {
   ensureNode(url: string): void;
@@ -40,6 +40,7 @@ export class LiveCrawlerSession {
 
     let browser: Browser | null = null;
     try {
+      const { chromium } = await importPlaywright();
       browser = await chromium.launch({ headless: true });
       const contextArgs: { storageState?: string } = {};
       if (storageState) contextArgs.storageState = storageState;

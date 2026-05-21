@@ -61,6 +61,17 @@ function detectAmbiguousLocators(jsonResult: string): string {
 import type { PlaywrightSessionService } from "../services/execution/PlaywrightSessionService.js";
 import type { McpConfigService } from "../services/config/McpConfigService.js";
 
+export function isDomInspectionFailure(result: string): boolean {
+  return /^\s*\[ERROR\]/.test(result);
+}
+
+function errorResult(text: string) {
+  return {
+    isError: true as const,
+    content: [{ type: "text" as const, text }]
+  };
+}
+
 export function registerInspectPageDom(server: McpServer, container: ServiceContainer) {
   const domInspector = container.resolve<DomInspectorService>("domInspector");
   const domInspectionCache = container.resolve<Map<string, string>>("domInspectionCache");
@@ -136,6 +147,10 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         saveStorageState,
         sessionService?.getPage() ?? undefined // reuse active persistent session if available
       );
+
+      if (isDomInspectionFailure(result)) {
+        return errorResult(result);
+      }
 
       // Record successful scan in context manager
       contextManager.recordScan(url, result);

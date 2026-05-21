@@ -1,8 +1,28 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ServiceContainer } from "../container/ServiceContainer.js";
-import { textResult, truncate } from "./_helpers.js";
-import type { EnvManagerService } from "../services/config/EnvManagerService.js";
+import { textResult } from "./_helpers.js";
+import type { EnvManagerService, EnvReadResult, EnvWriteResult } from "../services/config/EnvManagerService.js";
+
+const REDACTED_ENV_VALUE = "[REDACTED]";
+
+export function redactEnvReadResult(result: EnvReadResult) {
+  const keys = Array.from(new Set([...result.keys, ...Object.keys(result.values)]));
+  return {
+    ...result,
+    keys,
+    values: Object.fromEntries(keys.map((key) => [key, REDACTED_ENV_VALUE])),
+    redacted: true,
+  };
+}
+
+export function redactEnvWriteResult(result: EnvWriteResult) {
+  return {
+    ...result,
+    written: result.written.map((entry) => entry.split("=", 1)[0] || entry),
+    redacted: true,
+  };
+}
 
 export function registerManageEnv(server: McpServer, container: ServiceContainer) {
   const envManager = container.resolve<EnvManagerService>("envManager");
@@ -11,7 +31,7 @@ export function registerManageEnv(server: McpServer, container: ServiceContainer
     "manage_env",
     {
       description: `TRIGGER: Discover existing env keys or upsert new credentials.
-RETURNS: Existing .env keys (read) | Write confirmation (write) | Scaffolded .env file (scaffold). Auto-manages .env.example.
+RETURNS: Existing .env keys with redacted values (read) | Write confirmation with key names only (write) | Scaffolded .env keys (scaffold). Auto-manages .env.example.
 NEXT: Verify keys set → Proceed with test setup.
 COST: Low (~50-100 tokens)
 ERROR_HANDLING: Standard
@@ -32,20 +52,20 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
     async (args) => {
       const { projectRoot, action, entries } = args as any;
       if (action === "read") {
-        return textResult(JSON.stringify(envManager.read(projectRoot), null, 2));
+        return textResult(JSON.stringify(redactEnvReadResult(envManager.read(projectRoot)), null, 2));
       } else if (action === "write") {
         const res = envManager.write(projectRoot, entries || []);
-        let output = JSON.stringify(res, null, 2);
+        let output = JSON.stringify(redactEnvWriteResult(res), null, 2);
         
         // Add explanation when keys are skipped
         if (res.skipped.length > 0) {
-          output += `\n\n⚠️  Keys skipped: ${res.skipped.join(', ')}\nReason: Values already exist in .env (use overwrite flag to force update)`;
+          output += `\n\n⚠️  Keys skipped: ${res.skipped.join(', ')}\nReason: Values already exist in .env. This tool does not currently expose an overwrite option.`;
         }
         
         return textResult(output);
       } else if (action === "scaffold") {
         const res = envManager.scaffold(projectRoot);
-        return textResult(JSON.stringify(res, null, 2));
+        return textResult(JSON.stringify(redactEnvWriteResult(res), null, 2));
       } else {
         return textResult(`Unknown action: ${action}`);
       }

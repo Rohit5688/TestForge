@@ -36,6 +36,7 @@ detect.json
 test-fixes.cjs
 incoming_files.txt
 local_files.txt
+graphify-out
 
 # IDE & System settings
 .vscode/

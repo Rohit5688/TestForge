@@ -8,14 +8,36 @@ import { TestRunnerService } from "../services/execution/TestRunnerService.js";
 import { JsonToPomTranspiler } from "../utils/JsonToPomTranspiler.js";
 import { JsonToStepsTranspiler } from "../utils/JsonToStepsTranspiler.js";
 import { OrchestrationService } from "../services/system/OrchestrationService.js";
+import { FileWriterService } from "../services/io/FileWriterService.js";
+import { StagingService } from "../services/execution/StagingService.js";
 import type { SelfHealingService } from "../services/execution/SelfHealingService.js";
 import type { CodebaseAnalysisResult } from "../interfaces/ICodebaseAnalyzer.js";
 import { LastResultStore } from "../services/system/LastResultStore.js";
 import { McpErrors } from "../types/ErrorSystem.js";
 
+function validationRejection(error: unknown): Error {
+  const msg = error instanceof Error ? error.message : String(error);
+  const fileMatch = msg.match(/(?:in file|file:?)\s+([^\s,]+)/i);
+  const patternMatch = msg.match(/(?:native locator|pattern|violation|found):\s*(.+?)(?:\n|$)/i);
+  const detail = [
+    `[REJECTION] Validation failed — do NOT retry blindly.`,
+    fileMatch ? `  File: ${fileMatch[1]}` : '',
+    patternMatch ? `  Violated pattern: ${patternMatch[1]?.trim()}` : '',
+    `  Raw error: ${msg}`,
+    `NEXT: Fix the flagged pattern in generated content then call validate_and_write again.`
+  ].filter(Boolean).join('\n');
+  const errorOpts: Record<string, any> = { suggestedNextTools: ['validate_and_write', 'execute_sandbox_code'] };
+  if (fileMatch) {
+    errorOpts.file = fileMatch[1];
+  }
+  return McpErrors.projectValidationFailed(detail, 'validate_and_write', errorOpts);
+}
+
 export function registerValidateAndWrite(server: McpServer, container: ServiceContainer) {
   const runner = container.resolve<TestRunnerService>("runner");
   const orchestration = container.resolve<OrchestrationService>("orchestrator");
+  const fileWriter = container.resolve<FileWriterService>("fileWriter");
+  const stagingService = container.resolve<StagingService>("stagingService");
   const healer = container.resolve<SelfHealingService>("healer");
   const analysisCache = container.resolve<Map<string, CodebaseAnalysisResult>>("analysisCache");
   const contextManager = container.resolve<any>("contextManager");
@@ -117,31 +139,24 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         }
       }
 
-      // 2. Perform atomic write (stages, validates, then writes if valid)
-      let writeResult;
-      try {
-        writeResult = await orchestration.createTestAtomically(projectRoot, resolvedFiles);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        const fileMatch = msg.match(/(?:in file|file:?)\s+([^\s,]+)/i);
-        const patternMatch = msg.match(/(?:native locator|pattern|violation|found):\s*(.+?)(?:\n|$)/i);
-        const detail = [
-          `[REJECTION] Validation failed — do NOT retry blindly.`,
-          fileMatch ? `  File: ${fileMatch[1]}` : '',
-          patternMatch ? `  Violated pattern: ${patternMatch[1]?.trim()}` : '',
-          `  Raw error: ${msg}`,
-          `NEXT: Fix the flagged pattern in generated content then call validate_and_write again.`
-        ].filter(Boolean).join('\n');
-        const errorOpts: Record<string, any> = { suggestedNextTools: ['validate_and_write', 'execute_sandbox_code'] };
-        if (fileMatch) {
-          errorOpts.file = fileMatch[1];
-        }
-        throw McpErrors.projectValidationFailed(detail, 'validate_and_write', errorOpts);
-      }
-
-
       if (dryRun) {
+        let stagingDir: string | undefined;
+        let dryWriteResult: { written: string[]; warnings: string[] } = { written: [], warnings: [] };
+        try {
+          dryWriteResult = fileWriter.writeFiles(projectRoot, resolvedFiles, true);
+          stagingDir = await stagingService.stageAndValidate(projectRoot, resolvedFiles);
+        } catch (e) {
+          throw validationRejection(e);
+        } finally {
+          if (stagingDir) {
+            stagingService.cleanup(stagingDir);
+          }
+        }
+
         const diffLines: string[] = ['[DRY RUN] Validation ✅ passed. Nothing written to disk.\n'];
+        if (dryWriteResult.warnings.length > 0) {
+          diffLines.push(`[WARNINGS]\n${dryWriteResult.warnings.map((w: string) => `  ${w}`).join('\n')}\n`);
+        }
         for (const f of resolvedFiles) {
           const absPath = path.isAbsolute(f.path) ? f.path : path.join(projectRoot, f.path);
           const exists = fs.existsSync(absPath);
@@ -155,6 +170,14 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         }
         diffLines.push(`\nTo write these files, call validate_and_write again without dryRun:true.`);
         return textResult(diffLines.join('\n'));
+      }
+
+      // 2. Perform atomic write (stages, validates, then writes if valid)
+      let writeResult;
+      try {
+        writeResult = await orchestration.createTestAtomically(projectRoot, resolvedFiles);
+      } catch (e) {
+        throw validationRejection(e);
       }
 
       // 3. Verification run

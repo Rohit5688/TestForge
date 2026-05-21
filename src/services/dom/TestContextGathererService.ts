@@ -1,6 +1,6 @@
-import { chromium } from 'playwright';
 import type { Browser, Page } from 'playwright';
 import type { TestContext, PageContext, PageElement, NetworkCall } from '../../types/TestContext.js';
+import { importPlaywright } from '../../utils/PlaywrightRuntime.js';
 
 export interface ActionStep {
   action: 'click' | 'fill' | 'wait' | 'goto';
@@ -46,6 +46,7 @@ export class TestContextGathererService {
     let browser: Browser | undefined;
 
     try {
+      const { chromium } = await importPlaywright();
       browser = await chromium.launch({
         headless: true,
         args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-blink-features=AutomationControlled']

@@ -1,9 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { ServiceContainer } from "../container/ServiceContainer.js";
-import { textResult, truncate } from "./_helpers.js";
+import { textResult } from "./_helpers.js";
 import { TestRunnerService } from "../services/execution/TestRunnerService.js";
 import { LastResultStore } from "../services/system/LastResultStore.js";
+import { McpConfigService } from "../services/config/McpConfigService.js";
+import { buildPackageScriptCommandPlan, buildTrustedCommandPlan } from "../utils/CommandPolicy.js";
+import { McpErrors } from "../types/ErrorSystem.js";
 import { spawn } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
@@ -29,14 +32,19 @@ function extractFailureClass(output: string): string | null {
 }
 
 /** Parse raw Playwright output into structured failure list for direct agent consumption. */
-function parseStructuredFailures(output: string): {
-  passed: number; failed: number;
+export function parseStructuredFailures(output: string): {
+  passed: number; failed: number; skipped: number; noTestsRan: boolean;
   failures: { test: string; file: string; line: number; error: string }[];
 } {
-  const passedMatch = output.match(/(\d+)\s+passed/);
-  const failedMatch = output.match(/(\d+)\s+failed/);
+  const passedMatch = output.match(/passed:\s*(\d+)/) ?? output.match(/(\d+)\s+passed/) ?? output.match(/PASS\s*\((\d+)\)/);
+  const failedMatch = output.match(/failed:\s*(\d+)/) ?? output.match(/(\d+)\s+failed/) ?? output.match(/FAIL\s*\((\d+)\)/);
+  const skippedMatch = output.match(/skipped:\s*(\d+)/) ?? output.match(/(\d+)\s+skipped/);
   const passed = passedMatch?.[1] ? parseInt(passedMatch[1]) : 0;
   const failed = failedMatch?.[1] ? parseInt(failedMatch[1]) : 0;
+  const skipped = skippedMatch?.[1] ? parseInt(skippedMatch[1]) : 0;
+  const noTestsRan = output.includes('NO TESTS RAN') || (
+    passed === 0 && failed === 0 && skipped === 0 && output.includes('[TEST SUMMARY]')
+  );
   const failures: { test: string; file: string; line: number; error: string }[] = [];
   const testBlockRe = /●\s+(.+?)\n([\s\S]+?)(?=\n\s*●|\n\s*\d+\s+(?:passed|failed)|$)/g;
   let m: RegExpExecArray | null;
@@ -54,11 +62,46 @@ function parseStructuredFailures(output: string): {
     failures.push({ test: testName, file, line, error });
     if (failures.length >= 20) break;
   }
-  return { passed, failed, failures };
+  return { passed, failed, skipped, noTestsRan, failures };
+}
+
+export function formatRunPlaywrightToolOutput(output: string): string {
+  const structured = parseStructuredFailures(output);
+  const compressOutput = (raw: string): string => {
+    const lines = raw.split('\n');
+    let passCount = 0;
+    const kept: string[] = [];
+    for (const line of lines) {
+      // Passing test lines: start with spaces + ✓/✔/√ or contain " passed"
+      if (/^\s+[✓✔√]/.test(line) || /^\s+\d+\) /.test(line) === false && /\bpassed\b/.test(line) && /^\s+/.test(line)) {
+        passCount++;
+      } else {
+        kept.push(line);
+      }
+    }
+    if (passCount > 0) {
+      // Insert compact summary at top
+      kept.unshift(`[OUTPUT COMPRESSED] ${passCount} passing lines omitted. Only failures and summary shown.`);
+    }
+    return kept.join('\n');
+  };
+
+  const compressedOutput = structured.noTestsRan
+    ? output
+    : structured.failed === 0
+      ? `[SUMMARY] ${structured.passed} passed, 0 failed ✅`
+      : compressOutput(output);
+
+  // Append structured failure block — agent reads this, skips log parsing
+  const failureBlock = (structured.failed > 0 || structured.noTestsRan)
+    ? `\n\n[FAILURES]\n${JSON.stringify(structured, null, 2)}`
+    : `\n\n[FAILURES] passed=${structured.passed} failed=0`;
+  return compressedOutput + failureBlock;
 }
 
 export function registerRunPlaywrightTest(server: McpServer, container: ServiceContainer) {
   const runner = container.resolve<TestRunnerService>("runner");
+  const configService = container.resolve<McpConfigService>("mcpConfig");
   const store = LastResultStore.getInstance();
 
   server.registerTool(
@@ -75,9 +118,9 @@ Executes the Playwright-BDD test suite natively.
 OUTPUT: Ack (<= 10 words), proceed.`,
       inputSchema: z.object({
         "projectRoot": z.string().describe("Absolute path to the automation project."),
-        "tags": z.string().optional().describe("Optional: filter by tag(s), e.g. '@smoke' or '@regression'. Passed as --grep to Playwright."),
+        "tags": z.string().optional().describe("Optional: filter by tag(s), e.g. '@smoke' or '@regression'. Passed to bddgen as --tags and to Playwright as --grep."),
         "specificTestArgs": z.string().optional().describe("Optional arguments like a specific feature file path or project flag."),
-        "overrideCommand": z.string().optional().describe("Optional full command to run (e.g. 'npm run test:e2e:smoke'). This bypasses the default executionCommand."),
+        "overrideCommand": z.string().optional().describe("Optional package-script command to run (e.g. 'npm run test:e2e:smoke'). Arbitrary shell commands are blocked; project defaults should use mcp-config.json executionCommand."),
         "detached": z.boolean().optional().describe("If true, spawns the test process in the background and returns a runId immediately. Use get_test_run_status(runId) to poll results. Prevents Cline MCP timeout on long-running suites.")
       }),
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false }
@@ -89,6 +132,10 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         argsStr = `--grep ${tags} ${argsStr}`.trim();
       }
 
+      if (overrideCommand) {
+        buildPackageScriptCommandPlan(projectRoot, overrideCommand);
+      }
+
       // Detached mode: spawn process, return runId immediately — avoids Cline MCP timeout
       if (detached) {
         const runId = randomUUID().slice(0, 8);
@@ -98,23 +145,37 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         const donePath = path.join(logDir, `${runId}.done`);
         const pidPath = path.join(logDir, `${runId}.pid`);
 
-        // Build command — same logic as TestRunnerService but as shell string
-        const cmd = overrideCommand || 'npm test';
-        const fullCmd = tags ? `TAGS="${tags}" ${cmd}` : cmd;
+        const config = configService.read(projectRoot);
+        const commandPlan = overrideCommand
+          ? [buildPackageScriptCommandPlan(projectRoot, overrideCommand)]
+          : buildTrustedCommandPlan(config.executionCommand || 'npm test');
+        if (commandPlan.length !== 1) {
+          throw McpErrors.invalidParameter(
+            'executionCommand',
+            'Detached mode supports one command without shell chaining. Put multi-step flows behind one package script, e.g. "npm run automated-test".',
+            'run_playwright_test'
+          );
+        }
+        const command = commandPlan[0]!;
         const logStream = fs.openSync(logPath, 'w');
 
-        const child = spawn('sh', ['-c', fullCmd], {
+        const child = spawn(command.exe, command.args, {
           cwd: projectRoot,
           detached: true,
+          env: tags ? { ...process.env, TAGS: tags } : process.env,
           stdio: ['ignore', logStream, logStream],
         });
         fs.writeFileSync(pidPath, String(child.pid ?? ''));
         child.unref();
 
         // Write .done sentinel when process exits
-        child.on('close', () => {
+        child.on('close', (code, signal) => {
           fs.closeSync(logStream);
-          fs.writeFileSync(donePath, String(Date.now()));
+          fs.writeFileSync(donePath, JSON.stringify({
+            completedAt: Date.now(),
+            exitCode: code,
+            signal,
+          }, null, 2));
         });
 
         return textResult(JSON.stringify({
@@ -125,7 +186,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         }, null, 2));
       }
 
-      const result = await runner.runTests(projectRoot, argsStr, undefined, overrideCommand);
+      const result = await runner.runTests(projectRoot, argsStr, undefined, overrideCommand, { tags });
 
       // P8: Write result to shared store — self_heal_test auto-reads this
       store.write({
@@ -137,37 +198,7 @@ OUTPUT: Ack (<= 10 words), proceed.`,
         timestamp: Date.now(),
       });
 
-      // Gap-4 fix: Token-efficient output — suppress passing test lines, keep failures + summary.
-      // Passing lines contain "✓" or "  ✔" or "    ✓" — compress them to a count.
-      const structured = parseStructuredFailures(result.output);
-      const compressOutput = (raw: string): string => {
-        const lines = raw.split('\n');
-        let passCount = 0;
-        const kept: string[] = [];
-        for (const line of lines) {
-          // Passing test lines: start with spaces + ✓/✔/√ or contain " passed"
-          if (/^\s+[✓✔√]/.test(line) || /^\s+\d+\) /.test(line) === false && /\bpassed\b/.test(line) && /^\s+/.test(line)) {
-            passCount++;
-          } else {
-            kept.push(line);
-          }
-        }
-        if (passCount > 0) {
-          // Insert compact summary at top
-          kept.unshift(`[OUTPUT COMPRESSED] ${passCount} passing lines omitted. Only failures and summary shown.`);
-        }
-        return kept.join('\n');
-      };
-      const compressedOutput = structured.failed === 0
-        ? `[SUMMARY] ${structured.passed} passed, 0 failed ✅`
-        : compressOutput(result.output);
-
-      // Append structured failure block — agent reads this, skips log parsing
-      const failureBlock = structured.failed > 0
-        ? `\n\n[FAILURES]\n${JSON.stringify(structured, null, 2)}`
-        : `\n\n[FAILURES] passed=${structured.passed} failed=0`;
-      return textResult(compressedOutput + failureBlock);
+      return textResult(formatRunPlaywrightToolOutput(result.output));
     }
   );
 }
-

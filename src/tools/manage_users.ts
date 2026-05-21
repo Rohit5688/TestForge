@@ -3,6 +3,28 @@ import { z } from "zod";
 import { ServiceContainer } from "../container/ServiceContainer.js";
 import { textResult, truncate } from "./_helpers.js";
 import type { UserStoreService } from "../services/config/UserStoreService.js";
+import type { UserStoreReadResult } from "../services/config/UserStoreTypes.js";
+
+export function redactUserStoreReadResult(result: UserStoreReadResult) {
+  return {
+    environment: result.environment,
+    filePath: result.filePath,
+    exists: result.exists,
+    roles: result.roles,
+    userCount: result.roles.length,
+    users: Object.fromEntries(
+      Object.entries(result.users).map(([role, credential]) => [
+        role,
+        {
+          role: credential.role ?? role,
+          fields: Object.keys(credential),
+          redacted: true,
+        },
+      ])
+    ),
+    redacted: true,
+  };
+}
 
 export function registerManageUsers(server: McpServer, container: ServiceContainer) {
   const userStore = container.resolve<UserStoreService>("userStore");
@@ -11,7 +33,7 @@ export function registerManageUsers(server: McpServer, container: ServiceContain
     "manage_users",
     {
       description: `TRIGGER: Manage multi-environment test users.
-RETURNS: User list (list) | Updated roles config (add-role) | Scaffolded users file (scaffold).
+RETURNS: Role list with redacted credential fields (list) | Updated roles config (add-role) | Scaffolded users file (scaffold).
 NEXT: Verify user roles exist → Reference in test steps via getUser() helper.
 COST: Low (~50-100 tokens)
 ERROR_HANDLING: Standard
@@ -32,7 +54,7 @@ OUTPUT INSTRUCTIONS: Do NOT repeat file path or parameters. Do NOT summarise wha
       const env = environment || "staging";
       if (action === "list") {
         const result = userStore.read(projectRoot, env);
-        return textResult(truncate(JSON.stringify(result, null, 2)));
+        return textResult(truncate(JSON.stringify(redactUserStoreReadResult(result), null, 2)));
       } else if (action === "add-role") {
         const result = userStore.addRoles(projectRoot, env, roles || []);
         return textResult(truncate(JSON.stringify(result, null, 2)));

@@ -1,113 +1,54 @@
 ---
-name: playwright-bdd
-description: Creates and maintains Gherkin feature files and step definitions for Behavior-Driven Development (BDD) with Playwright. Use when creating or editing .feature files and writing BDD steps for a playwright-bdd project.
+name: testforge-playwright-bdd
+description: Maintain TestForge Playwright-BDD feature files and step definitions using TestForge MCP conventions.
 ---
 
-# playwright-bdd
+# TestForge Playwright-BDD
 
-Workflow for creating and maintaining [playwright-bdd](https://github.com/vitalets/playwright-bdd) feature files and step definitions.
+Use this skill when creating or editing `.feature` files, step definitions, and page objects in a TestForge-scaffolded project. This adapts Playwright-BDD practice to TestForge MCP conventions.
 
-## Steps
+## Discover Existing Test Language
 
-### 1. Get familiar with the CLI
+- Prefer `list_existing_steps({ projectRoot })` before writing new Gherkin.
+- If using shell fallback, run `npx bddgen export` with the project config and reuse matching patterns exactly.
+- Read existing `.feature` files for tag, Background, Scenario Outline, data table, and doc string conventions.
 
-Run the following to see all available commands and options:
+## Required Step Pattern
 
-```bash
-npx bddgen --help
-```
-
-### 2. Discover project configuration
-
-Search `playwright.config.ts` (or `playwright.config.js`) for `defineBddConfig(...)` calls. This reveals the actual directory where `.feature` files live and `steps` (glob patterns pointing to step definition files).
-
-- If the user has explicitly provided a features directory, use it directly.
-- If multiple `defineBddConfig` calls exist, guess the most suitable one based on the feature description (e.g. match directory names or tags to the described feature area). Only ask the user to clarify if it is genuinely ambiguous.
-
-### 3. Discover available steps
-
-Run `npx bddgen export` to list all registered step definitions:
-
-```bash
-npx bddgen export
-# If the config file is not at the project root:
-npx bddgen export --config <path-to-config>
-```
-
-The output lists steps in the format:
-
-```
-* Given <pattern>
-* When <pattern>
-* Then <pattern>
-```
-
-Parse these lines and use the patterns as-is when writing feature steps. Do NOT invent new step text if a matching pattern already exists.
-
-### 4. Write the feature file
-
-Place the file inside features directory discovered in step 2. Prefer existing step patterns; flag any behaviors that cannot be covered and proceed to step 5.
-
-**Practical tips:**
-
-- **Scenario Outline + Examples** — when the same flow should run with multiple data sets, use `Scenario Outline` with an `Examples:` table instead of duplicating scenarios.
-- **Background** — if two or more scenarios share identical `Given` steps, extract those into a `Background:` block.
-- **Tags** — add tags (`@smoke`, `@regression`, `@jira:123`) to support filtering via `npx bddgen --tags "@smoke and not @slow"`. Match existing tag conventions visible in project `.feature` files.
-- **Cucumber expression parameters** — `{string}` values must be written in `"double quotes"`, `{int}` is a bare integer, `{float}` is a bare decimal. Never modify the keyword pattern text itself.
-- **Doc strings** — pass multi-line values (e.g. JSON, SQL) as triple-quoted doc strings directly below the step line:
-  ```
-  Given the following payload:
-    """
-    { "key": "value" }
-    """
-  ```
-- **Data tables** — pass tabular data using pipe-separated tables directly below the step line:
-  ```
-  Given the following users:
-    | name  | role  |
-    | Alice | admin |
-  ```
-
-### 5. Propose missing step implementations
-
-When a behavior cannot be covered by existing steps:
-
-1. Resolve the `steps` glob from `defineBddConfig` and read the actual step files.
-2. Identify the project's step style:
-   - **Playwright-style**: `Given('pattern', async ({ page, ... }, arg) => { ... })`
-   - **Cucumber-style**: `Given('pattern', async function(arg) { this.page... })`
-   - **Decorators**: `@Given('pattern') async methodName(arg) { ... }` inside a POM class
-   - **TestForge singleton-style** (preferred): `Given('pattern', async () => { const page = new MyPage(); await page.action(); })`
-3. Propose complete step implementations in the same style as the existing files.
-4. Suggest the most appropriate file to add them to, inferred from the existing file naming (e.g. add auth-related steps to `steps/auth.steps.ts` if that file exists).
-
-### 6. TestForge-specific: Page Object pattern
-
-When generating tests for a TestForge-scaffolded project (using `vasu-playwright-utils`):
-
-- Page Objects do **NOT** take `page` as a constructor argument — the page is injected via the `test-setup/page-setup.ts` fixture automatically.
-- Instantiate as: `const loginPage = new LoginPage();` (no `page` argument)
-- Steps use `async () => {}` (no fixture destructuring): `Given('I log in', async () => { ... })`
-- For API steps: `import { getRequest } from 'vasu-playwright-utils';`
+- Import `createBdd` from `playwright-bdd`.
+- Import `test` from `../test-setup/page-setup.js`.
+- Declare `const { Given, When, Then } = createBdd(test);`.
+- In normal UI steps, instantiate page objects without passing `page`: `const loginPage = new LoginPage();`.
+- Keep raw Playwright calls out of steps; steps should call page object methods.
 
 ```typescript
-// ✅ CORRECT — TestForge pattern
 import { createBdd } from 'playwright-bdd';
 import { test } from '../test-setup/page-setup.js';
 
 const { Given, When, Then } = createBdd(test);
 
-Given('I am on the login page', async () => {
+Given('I sign in as an admin', async () => {
   const loginPage = new LoginPage();
-  await loginPage.navigate('/login');
-});
-
-// ❌ WRONG — do not inject page via fixture
-Given('I am on the login page', async ({ page }) => {
-  await page.goto('/login');
+  await loginPage.signInAs('admin');
 });
 ```
 
-## Further Reading
+## API and Network Exceptions
 
-For deeper detail on any topic — configuration, step styles, fixtures, hooks, reporters — fetch the official documentation: https://vitalets.github.io/playwright-bdd/#/
+- For pure API work inside TestForge steps, prefer `getRequest()` from `vasu-playwright-utils`.
+- For network interception tied to a browser action, fixture destructuring is allowed only when the step explicitly needs Playwright `page` or `request`.
+- Keep API payload interfaces in `models/` when payloads are complex.
+
+## Tags and Targeted Runs
+
+- Match existing tag conventions such as `@smoke`, `@regression`, or product-specific tags.
+- Prefer `run_playwright_test({ projectRoot, tags:"@tag" })` to verify tagged work.
+- TestForge sends tag filters to both `bddgen --tags` and Playwright `--grep`.
+- For one feature, use `run_playwright_test` with `specificTestArgs` rather than running the whole suite.
+
+## Gherkin Rules
+
+- Keep scenarios business-readable and avoid implementation details.
+- Use Scenario Outline for repeated examples.
+- Use Background only when multiple scenarios share the same setup.
+- Do not invent duplicate step text when `list_existing_steps` shows a reusable semantic match.

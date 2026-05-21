@@ -13,6 +13,10 @@ export class TsConfigManager {
       let changed = false;
       if (!tsconfig.compilerOptions) tsconfig.compilerOptions = {};
       if (!tsconfig.compilerOptions.paths) tsconfig.compilerOptions.paths = {};
+      if (tsconfig.compilerOptions.baseUrl == null) {
+        tsconfig.compilerOptions.baseUrl = '.';
+        changed = true;
+      }
       
       const parts = dir.split(/[/\\]/);
       const topDir = parts[0];

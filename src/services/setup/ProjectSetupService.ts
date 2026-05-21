@@ -6,6 +6,7 @@ import { ConfigTemplateManager } from '../../utils/ConfigTemplateManager.js';
 import { DependencyManager } from '../../utils/DependencyManager.js';
 import { DocScaffolder } from '../../utils/DocScaffolder.js';
 import type { SetupResult } from './ProjectSetupTypes.js';
+import type { DependencyInstallResult } from '../../utils/DependencyManager.js';
 
 /**
  * ProjectSetupService — Phase 20D + Phase 8 Hardening (Refactored Phase 6)
@@ -17,11 +18,12 @@ export class ProjectSetupService {
   private readonly envManager: EnvManagerService;
   private readonly scaffolder = new ProjectScaffolder();
   private readonly configManager = new ConfigTemplateManager();
-  private readonly dependencyManager = new DependencyManager();
+  private readonly dependencyManager: DependencyManager;
   private readonly docScaffolder = new DocScaffolder();
 
-  constructor(envManager?: EnvManagerService) {
+  constructor(envManager?: EnvManagerService, dependencyManager?: DependencyManager) {
     this.envManager = envManager || new EnvManagerService();
+    this.dependencyManager = dependencyManager || new DependencyManager();
   }
 
   /**
@@ -64,9 +66,10 @@ export class ProjectSetupService {
 
     return JSON.stringify({
       phase: 2,
-      status: 'SETUP_COMPLETE',
+      status: res.installed ? 'SETUP_COMPLETE' : 'SETUP_BLOCKED',
       projectRoot: res.projectRoot,
       installed: res.installed,
+      installDetails: res.installDetails,
       dirsCreated: res.dirsCreated,
       filesCreated: res.filesCreated,
       envScaffolded: res.envScaffolded,
@@ -115,14 +118,24 @@ export class ProjectSetupService {
     if (this.scaffolder.scaffoldPageSetup(projectRoot)) filesCreated.push('test-setup/page-setup.ts');
     if (this.scaffolder.scaffoldGitIgnore(projectRoot)) filesCreated.push('.gitignore');
     if (this.scaffolder.scaffoldSampleFeature(projectRoot)) filesCreated.push('features/sample.feature');
+    if (this.scaffolder.scaffoldSampleSteps(projectRoot)) filesCreated.push('step-definitions/sample.steps.ts');
+    filesCreated.push(...this.scaffolder.scaffoldAgentSkills(projectRoot));
 
     // 4. Install dependencies if needed
     let installed = false;
+    let installDetails: DependencyInstallResult | undefined;
     const nodeModulesPath = path.join(projectRoot, 'node_modules');
     if (!fs.existsSync(nodeModulesPath) && !repairMode) {
-      installed = await this.dependencyManager.installDependencies(projectRoot);
+      installDetails = await this.dependencyManager.installDependenciesDetailed(projectRoot);
+      installed = installDetails.success;
     } else {
       installed = true;
+      installDetails = {
+        success: true,
+        npmInstalled: true,
+        browsersInstalled: true,
+        steps: []
+      };
     }
 
     // 5. Scaffold .env files
@@ -130,9 +143,9 @@ export class ProjectSetupService {
     const envResults = this.envManager.scaffoldMulti(projectRoot, envEnvs);
     const envScaffolded = envResults.some(r => r.written.length > 0);
 
-    const message = this.generateSummaryMessage(projectRoot, dirsCreated, filesCreated, installed, envScaffolded);
+    const message = this.generateSummaryMessage(projectRoot, dirsCreated, filesCreated, installed, envScaffolded, installDetails);
 
-    return { projectRoot, installed, dirsCreated, filesCreated, envScaffolded, message };
+    return { projectRoot, installed, installDetails, dirsCreated, filesCreated, envScaffolded, message };
   }
 
   /**
@@ -150,20 +163,39 @@ export class ProjectSetupService {
     dirsCreated: string[],
     filesCreated: string[],
     installed: boolean,
-    envScaffolded: boolean
+    envScaffolded: boolean,
+    installDetails?: DependencyInstallResult
   ): string {
+    const installFailure = installDetails?.steps.find(step => !step.success && !step.skipped);
+    const installSummary = installed
+      ? '\n✅ npm packages and Playwright browsers installed'
+      : [
+          '\n⚠️ Setup blocked: dependencies or Playwright browsers failed to install.',
+          installDetails ? `\n   npmInstalled: ${installDetails.npmInstalled}` : '',
+          installDetails ? `\n   browsersInstalled: ${installDetails.browsersInstalled}` : '',
+          installFailure ? `\n   failedCommand: ${installFailure.command}` : '',
+          installFailure?.exitCode != null ? `\n   exitCode: ${installFailure.exitCode}` : '',
+          installFailure?.stderr ? `\n   stderr: ${installFailure.stderr}` : '',
+          installFailure?.error ? `\n   error: ${installFailure.error}` : '',
+          '\n   Fix: run the failed command from the project root, then rerun setup_project.'
+        ].filter(Boolean).join('');
+
     return [
       `✅ Project scaffolded at ${projectRoot}`,
       dirsCreated.length > 0 ? `\nDirectories created: ${dirsCreated.join(', ')}` : '',
       filesCreated.length > 0 ? `\nFiles created: ${filesCreated.join(', ')}` : '',
-      installed
-        ? '\n✅ npm packages installed (Playwright + playwright-bdd + TypeScript + dotenv + faker)'
-        : '\n⚠️ Package install skipped (node_modules already present or install failed)',
+      installSummary,
       envScaffolded ? '\n✅ .env scaffolded' : '\n~ .env already exists',
       '\n\n🚀 NEXT STEPS:',
-      '  1. Open .env and replace ***FILL_IN*** values.',
-      '  2. Update BASE_URL in .env to your application URL.',
-      '  3. Ask me to generate tests, or run: npm test',
+      installed
+        ? '  1. Open .env and replace ***FILL_IN*** values.'
+        : '  1. Fix the failed install command above.',
+      installed
+        ? '  2. Update BASE_URL in .env to your application URL.'
+        : '  2. Rerun setup_project.',
+      installed
+        ? '  3. Ask me to generate tests, or run: npm test'
+        : '  3. Then call check_playwright_ready.',
     ].filter(Boolean).join('');
   }
 

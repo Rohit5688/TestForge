@@ -7,12 +7,49 @@ import { UserStoreService } from '../config/UserStoreService.js';
 import { EnvManagerService } from '../config/EnvManagerService.js';
 import { ProjectSetupService } from './ProjectSetupService.js';
 import { withRetry, RetryPolicies } from '../../utils/RetryEngine.js';
+import { importPlaywright } from '../../utils/PlaywrightRuntime.js';
 
 const execFileAsync = promisify(execFile);
 
 /** Windows package manager shim: npm/npx need .cmd extension for execFile. */
 function resolveExe(name: string): string {
   return process.platform === 'win32' ? `${name}.cmd` : name;
+}
+
+export interface BrowserVerificationResult {
+  launchable: boolean;
+  message: string;
+}
+
+type ExecFileRunner = (
+  file: string,
+  args: string[],
+  options: { cwd: string; timeout: number }
+) => Promise<unknown>;
+
+type BrowserLaunchVerifier = () => Promise<BrowserVerificationResult>;
+
+export async function verifyChromiumLaunchable(): Promise<BrowserVerificationResult> {
+  let browser: import('playwright').Browser | null = null;
+  try {
+    const { chromium } = await importPlaywright();
+    browser = await chromium.launch({
+      headless: true,
+      timeout: 30_000,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    return {
+      launchable: true,
+      message: 'Chromium launched successfully.'
+    };
+  } catch (error: any) {
+    return {
+      launchable: false,
+      message: error?.message ?? String(error)
+    };
+  } finally {
+    if (browser) await browser.close().catch(() => {});
+  }
 }
 
 /**
@@ -28,6 +65,16 @@ export class ProjectMaintenanceService {
   private readonly userStore = new UserStoreService();
   private readonly envManager = new EnvManagerService();
   private readonly setupService = new ProjectSetupService();
+  private readonly execFileRunner: ExecFileRunner;
+  private readonly browserLaunchVerifier: BrowserLaunchVerifier;
+
+  constructor(deps: {
+    execFileRunner?: ExecFileRunner;
+    browserLaunchVerifier?: BrowserLaunchVerifier;
+  } = {}) {
+    this.execFileRunner = deps.execFileRunner ?? execFileAsync;
+    this.browserLaunchVerifier = deps.browserLaunchVerifier ?? verifyChromiumLaunchable;
+  }
 
   /**
    * Lightweight, idempotent upgrade — called automatically by every tool.
@@ -107,7 +154,7 @@ export class ProjectMaintenanceService {
       // TASK-48: execFile instead of exec — prevents && chaining injection.
       // TF-NEW-02: networkCall retry — npm registry is slow in some CI regions.
       await withRetry(
-        () => execFileAsync(
+        () => this.execFileRunner(
           resolveExe('npm'), ['install', '--save-dev', 'playwright-bdd@latest'],
           { cwd: root, timeout: 120_000 }
         ),
@@ -118,27 +165,59 @@ export class ProjectMaintenanceService {
       logs.push(`\u274c Failed to update dependencies: ${err.message}`);
     }
 
-    // 3. Re-install Playwright browsers only if needed
+    // 3. Install Playwright browsers if needed, then verify the same browser runtime used by MCP tools.
     const browsersDir = path.join(root, 'node_modules', 'playwright', '.local-browsers');
     const skipBrowserInstall = process.env['SKIP_BROWSER_INSTALL'] === '1';
+    const installArgs = ['playwright', 'install', 'chromium', 'firefox', '--with-deps'];
+    const installCommand = `npx ${installArgs.join(' ')}`;
+    let browserCheck: BrowserVerificationResult | null = null;
+    let installAttempted = false;
+    let installSucceeded = false;
+
     if (skipBrowserInstall) {
       logs.push('⏭️  Browser install skipped (SKIP_BROWSER_INSTALL=1).');
-    } else if (fs.existsSync(browsersDir)) {
-      logs.push('ℹ️  Playwright browsers already present. Skipping install (set SKIP_BROWSER_INSTALL=1 to always skip).');
     } else {
+      if (fs.existsSync(browsersDir)) {
+        const existingCheck = await this.browserLaunchVerifier();
+        if (existingCheck.launchable) {
+          browserCheck = existingCheck;
+          logs.push(`✅ Playwright browsers already present and launch verified. ${existingCheck.message}`);
+        } else {
+          logs.push(`ℹ️  Local Playwright browser cache found but launch verification failed. Reinstalling browsers. Details: ${existingCheck.message}`);
+        }
+      }
+
       try {
-        // TASK-48: execFile split — avoid injecting shell args through user-controlled paths.
-        await withRetry(
-          () => execFileAsync(
-            resolveExe('npx'), ['playwright', 'install', 'chromium', 'firefox', '--with-deps'],
-            { cwd: root, timeout: 180_000 }
-          ),
-          RetryPolicies.networkCall
-        );
-        logs.push('✅ Playwright browsers installed.');
+        if (!browserCheck) {
+          installAttempted = true;
+          // TASK-48: execFile split — avoid injecting shell args through user-controlled paths.
+          await withRetry(
+            () => this.execFileRunner(
+              resolveExe('npx'), installArgs,
+              { cwd: root, timeout: 180_000 }
+            ),
+            RetryPolicies.networkCall
+          );
+          installSucceeded = true;
+        }
       } catch (err: any) {
         logs.push(`⚠️ Browser install warning: ${err.message}`);
+        logs.push(`Fix: run this from the project root:\n  ${installCommand}`);
       }
+    }
+
+    browserCheck = browserCheck ?? await this.browserLaunchVerifier();
+    if (browserCheck.launchable) {
+      if (installAttempted && installSucceeded) {
+        logs.push(`✅ Playwright browsers installed and launch verified. ${browserCheck.message}`);
+      } else if (skipBrowserInstall) {
+        logs.push(`✅ Playwright browser launch verified despite skipped install. ${browserCheck.message}`);
+      }
+    } else {
+      logs.push(
+        `⚠️ Playwright browser launch verification failed: ${browserCheck.message}\n` +
+        `Fix: run this from the project root:\n  ${installCommand}`
+      );
     }
 
     // 4. Verify baseline files (repair any that are missing)

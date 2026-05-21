@@ -101,7 +101,7 @@ export class FileWriterService {
       }
 
       const dir = path.dirname(absolutePath);
-      if (!fs.existsSync(dir)) {
+      if (!dryRun && !fs.existsSync(dir)) {
         TsConfigManager.ensureParentDirs(absolutePath);
       }
 

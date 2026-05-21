@@ -1,6 +1,9 @@
+import type { DependencyInstallResult } from '../../utils/DependencyManager.js';
+
 export interface SetupResult {
   projectRoot: string;
   installed: boolean;
+  installDetails?: DependencyInstallResult;
   dirsCreated: string[];
   filesCreated: string[];
   envScaffolded: boolean;
